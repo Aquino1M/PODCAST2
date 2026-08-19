@@ -1,8 +1,7 @@
 (() => {
   const STYLE_ID = 'onda-shorts-20-feed-style';
-  const VISIBLE_DESKTOP = 5;
-  const BUFFER_SLOTS = 1;
-  const TOTAL_SLOTS = VISIBLE_DESKTOP + BUFFER_SLOTS;
+  const COPIES = 5;
+  const CENTER_COPY = 2;
 
   const css = `
     .clips-row-wrap.onda-infinite-shorts {
@@ -64,35 +63,7 @@
     if (style.textContent !== css) style.textContent = css;
   }
 
-  function clearPlayback(card) {
-    if (!card) return;
-    card.classList.remove('onda-click-playing', 'onda-click-ready', 'onda-player-ready');
-    card.querySelectorAll('iframe.onda-click-player,iframe.onda-short-player,iframe.onda-short-frame').forEach(frame => {
-      try { frame.remove(); } catch {}
-    });
-  }
-
-  function setCardVideo(card, short, logicalIndex) {
-    if (!card || !short?.id) return;
-    clearPlayback(card);
-    card.dataset.ondaShortId = short.id;
-    card.setAttribute('aria-label', `Vídeo ${logicalIndex + 1} do Podcast do Bebezão. Clique para assistir sem áudio.`);
-
-    const poster = card.querySelector('.onda-short-poster');
-    if (poster) {
-      poster.style.display = '';
-      poster.src = `/short-thumb/${encodeURIComponent(short.id)}`;
-      poster.alt = '';
-    }
-
-    const open = card.querySelector('.onda-short-open');
-    if (open) {
-      open.href = short.url || `https://www.youtube.com/shorts/${encodeURIComponent(short.id)}`;
-      open.setAttribute('aria-label', `Abrir vídeo ${logicalIndex + 1} no YouTube`);
-    }
-  }
-
-  function makeCard(short, index, doc) {
+  function makeCard(short, index, doc, eager = false) {
     const card = doc.createElement('article');
     card.className = 'onda-safe-short';
     card.dataset.ondaShortId = short.id;
@@ -107,7 +78,7 @@
     poster.className = 'onda-short-poster';
     poster.src = `/short-thumb/${encodeURIComponent(short.id)}`;
     poster.alt = '';
-    poster.loading = index < VISIBLE_DESKTOP ? 'eager' : 'lazy';
+    poster.loading = eager ? 'eager' : 'lazy';
     poster.decoding = 'async';
     poster.addEventListener('error', () => { poster.style.display = 'none'; });
 
@@ -140,8 +111,9 @@
     let paused = false;
     let resumeTimer = null;
     let last = performance.now();
-    let nextVideoIndex = TOTAL_SLOTS % shorts.length;
     let raf = 0;
+    let normalizing = false;
+    let cycleWidth = 0;
 
     const pause = () => {
       paused = true;
@@ -159,58 +131,77 @@
       }, delay);
     };
 
-    const cardStep = () => {
-      const first = row.firstElementChild;
-      if (!first) return 0;
-      const gap = parseFloat(doc.defaultView.getComputedStyle(row).gap || '0') || 0;
-      return first.getBoundingClientRect().width + gap;
+    const measure = () => {
+      const first = row.children[0];
+      const nextCycle = row.children[shorts.length];
+      if (!first || !nextCycle) return 0;
+      cycleWidth = nextCycle.offsetLeft - first.offsetLeft;
+      return cycleWidth;
     };
 
-    const recyclePassedCards = () => {
-      let guard = 0;
-      let step = cardStep();
-      while (step > 0 && viewport.scrollLeft >= step && guard < 4) {
-        const first = row.firstElementChild;
-        if (!first) break;
+    const normalize = () => {
+      if (normalizing) return;
+      if (!cycleWidth && !measure()) return;
 
-        const short = shorts[nextVideoIndex];
-        setCardVideo(first, short, nextVideoIndex);
-        nextVideoIndex = (nextVideoIndex + 1) % shorts.length;
+      // Mantém o usuário sempre dentro da cópia central. Como as 5 cópias são
+      // idênticas, a troca de posição é visualmente imperceptível, inclusive
+      // durante inércia do toque no Chrome/Brave Android.
+      const min = cycleWidth * 1.25;
+      const max = cycleWidth * 3.75;
+      let next = viewport.scrollLeft;
 
-        row.appendChild(first);
-        viewport.scrollLeft -= step;
-        guard += 1;
-        step = cardStep();
+      while (next < min) next += cycleWidth;
+      while (next > max) next -= cycleWidth;
+
+      if (Math.abs(next - viewport.scrollLeft) > 1) {
+        normalizing = true;
+        viewport.scrollLeft = next;
+        requestAnimationFrame(() => { normalizing = false; });
       }
+    };
+
+    const placeInMiddle = () => {
+      if (!measure()) return;
+      viewport.scrollLeft = cycleWidth * CENTER_COPY;
+      normalize();
     };
 
     const tick = now => {
       if (!row.isConnected || !viewport.isConnected) return;
 
-      recyclePassedCards();
+      normalize();
 
       const hasPlayingVideo = !!row.querySelector('.onda-click-playing,.onda-player-ready');
       if (!paused && !hasPlayingVideo && !doc.hidden) {
         const elapsed = Math.min(40, Math.max(0, now - last));
         viewport.scrollLeft += Math.max(.22, elapsed * .024);
-        recyclePassedCards();
+        normalize();
       }
 
       last = now;
       raf = doc.defaultView.requestAnimationFrame(tick);
     };
 
+    viewport.addEventListener('scroll', normalize, { passive:true });
     viewport.addEventListener('mouseenter', pause);
     viewport.addEventListener('mouseleave', () => resume(450));
     viewport.addEventListener('touchstart', pause, { passive:true });
-    viewport.addEventListener('touchend', () => resume(1400), { passive:true });
-    viewport.addEventListener('touchcancel', () => resume(700), { passive:true });
+    viewport.addEventListener('touchmove', normalize, { passive:true });
+    viewport.addEventListener('touchend', () => {
+      normalize();
+      resume(1400);
+    }, { passive:true });
+    viewport.addEventListener('touchcancel', () => {
+      normalize();
+      resume(700);
+    }, { passive:true });
     viewport.addEventListener('pointerdown', event => {
       if (event.pointerType === 'mouse') return;
       pause();
     }, { passive:true });
     viewport.addEventListener('pointerup', event => {
       if (event.pointerType === 'mouse') return;
+      normalize();
       resume(1200);
     }, { passive:true });
     viewport.addEventListener('focusin', pause);
@@ -218,18 +209,33 @@
       if (!viewport.contains(event.relatedTarget)) resume(500);
     });
 
+    doc.defaultView.addEventListener('resize', () => {
+      const oldCycle = cycleWidth;
+      const ratio = oldCycle ? viewport.scrollLeft / oldCycle : CENTER_COPY;
+      requestAnimationFrame(() => {
+        if (!measure()) return;
+        viewport.scrollLeft = cycleWidth * Math.min(3, Math.max(2, ratio));
+        normalize();
+      });
+    });
+
     doc.defaultView.addEventListener('beforeunload', () => {
       if (raf) doc.defaultView.cancelAnimationFrame(raf);
     }, { once:true });
 
-    viewport.scrollLeft = 0;
+    requestAnimationFrame(() => {
+      placeInMiddle();
+      setTimeout(placeInMiddle, 80);
+      setTimeout(placeInMiddle, 350);
+    });
+
     raf = doc.defaultView.requestAnimationFrame(tick);
-    viewport._ondaInfiniteController = { pause, resume };
+    viewport._ondaInfiniteController = { pause, resume, normalize };
   }
 
   async function mountInfinite(doc) {
     const currentViewport = doc.querySelector('.clips-row-wrap');
-    if (!currentViewport || currentViewport.dataset.ondaInfinite20 === '1') return false;
+    if (!currentViewport || currentViewport.dataset.ondaInfinite20V2 === '1') return false;
 
     ensureStyle(doc);
 
@@ -248,22 +254,26 @@
       return false;
     }
 
-    if (shorts.length < TOTAL_SLOTS) return false;
+    if (shorts.length < 6) return false;
 
-    // Substitui o viewport anterior para desligar os loops antigos e ficar com
-    // apenas um controlador de rolagem. Isso evita aceleração ou travamento.
+    // Cria 5 cópias completas dos 20 vídeos e começa na cópia central.
+    // Assim nunca existe uma borda física próxima durante o swipe com inércia.
     const viewport = currentViewport.cloneNode(false);
     viewport.className = `${currentViewport.className} onda-infinite-shorts`;
-    viewport.dataset.ondaInfinite20 = '1';
+    viewport.dataset.ondaInfinite20V2 = '1';
     viewport.removeAttribute('data-onda-safe-preview');
     viewport.removeAttribute('data-onda-clip-v2');
+    viewport.removeAttribute('data-onda-infinite20');
 
     const row = doc.createElement('div');
     row.className = 'clips-row onda-safe-shorts-row onda-infinite-shorts-row';
     viewport.appendChild(row);
 
-    for (let index = 0; index < TOTAL_SLOTS; index += 1) {
-      row.appendChild(makeCard(shorts[index], index, doc));
+    for (let copy = 0; copy < COPIES; copy += 1) {
+      shorts.forEach((short, index) => {
+        const eager = copy === CENTER_COPY && index < 7;
+        row.appendChild(makeCard(short, index, doc, eager));
+      });
     }
 
     currentViewport.replaceWith(viewport);
@@ -272,8 +282,8 @@
   }
 
   function watchFrame(frame) {
-    if (!frame || frame.dataset.ondaInfinite20Watch === '1') return;
-    frame.dataset.ondaInfinite20Watch = '1';
+    if (!frame || frame.dataset.ondaInfinite20V2Watch === '1') return;
+    frame.dataset.ondaInfinite20V2Watch = '1';
 
     let timer = null;
     const attempt = () => {
