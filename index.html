@@ -11,6 +11,63 @@
   <link rel="stylesheet" href="/public/internal-fixes.css">
   <script src="/public/workspace-context.js?v=1" defer></script>
   <script src="/app.js" defer></script>
+  <script>
+    (() => {
+      let refreshTimer = 0;
+      let loading = false;
+
+      function applyPodcastName(name) {
+        const value = String(name || '').trim();
+        if (!value) return;
+        document.querySelector('.auth-hero-brand>strong')?.replaceChildren(value);
+        document.querySelector('.premium-brand-logo strong')?.replaceChildren(value);
+        document.querySelector('.brand-lockup strong')?.replaceChildren(value);
+        document.querySelector('.breadcrumbs>span')?.replaceChildren(value);
+        document.querySelector('.appearance-sample strong')?.replaceChildren(`${value} STUDIO OS`);
+        const footer = document.querySelector('.app-shell main>footer>span:first-child');
+        if (footer) footer.textContent = `${value} Studio OS · Operação em tempo real`;
+        const brand = document.querySelector('.brand-lockup');
+        if (brand) brand.dataset.ondaPodcastNameSynced = value;
+      }
+
+      async function refreshPodcastName() {
+        if (loading) return;
+        loading = true;
+        try {
+          const response = await fetch('/api/appearance', { cache:'no-store', headers:{ Accept:'application/json' } });
+          if (!response.ok) return;
+          const data = await response.json();
+          applyPodcastName(data?.podcastName);
+        } catch {}
+        finally { loading = false; }
+      }
+
+      function scheduleRefresh(delay = 0) {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshPodcastName, delay);
+      }
+
+      function detectNewShell() {
+        const brand = document.querySelector('.brand-lockup');
+        if (!brand || brand.dataset.ondaPodcastNameSynced) return;
+        scheduleRefresh(20);
+      }
+
+      document.addEventListener('submit', event => {
+        if (event.target?.matches?.('[data-appearance-form], [data-onda-admin-appearance]')) {
+          scheduleRefresh(450);
+          setTimeout(refreshPodcastName, 1100);
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        detectNewShell();
+        scheduleRefresh(300);
+      });
+      window.addEventListener('pageshow', () => scheduleRefresh(250));
+      new MutationObserver(detectNewShell).observe(document.documentElement, { childList:true, subtree:true });
+    })();
+  </script>
   <script src="/public/guest-photo-fix.js?v=2" defer></script>
   <script src="/public/vitrine-layout-fix.js" defer></script>
   <script src="/public/shorts-preview-fix.js" defer></script>
