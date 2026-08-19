@@ -11,7 +11,9 @@
     "start": "node server.mjs",
     "test": "node --test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@vercel/oidc": "latest"
+  },
   "devDependencies": {},
   "type": "module"
 }
