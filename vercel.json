@@ -15,6 +15,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/shorts-feed", "destination": "/api/youtube-shorts20" },
     { "source": "/short-thumb/:id", "destination": "/api/short-thumb?id=:id" },
     { "source": "/api/:path*", "destination": "/api?path=:path*" }
   ]
