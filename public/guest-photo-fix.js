@@ -60,8 +60,25 @@
       .filter(guest => guest?.name);
   }
 
+  function uniqueGuestList(list) {
+    const seen = new Set();
+    const unique = [];
+    for (const guest of Array.isArray(list) ? list : []) {
+      const key = normalize(guest?.name);
+      if (!key || seen.has(key) || !guest?.photo) continue;
+      seen.add(key);
+      unique.push(guest);
+    }
+    return unique;
+  }
+
   function guestMap(data) {
-    return new Map(guestList(data).map(guest => [normalize(guest.name), guest]));
+    const map = new Map();
+    for (const guest of guestList(data)) {
+      const key = normalize(guest.name);
+      if (key && !map.has(key)) map.set(key, guest);
+    }
+    return map;
   }
 
   function ensureStyle() {
@@ -161,12 +178,9 @@
     doc.head.appendChild(style);
   }
 
-  function chooseFrameGuest(card, index, map, list) {
-    const currentName = card.querySelector('.guest-name')?.textContent || '';
-    const exact = map.get(normalize(currentName));
-    if (exact) return exact;
-    if (!list.length) return null;
-    return list[index % list.length];
+  function expectedNames(list, offset, count) {
+    if (!list.length) return [];
+    return Array.from({ length:count }, (_, index) => list[(offset + index) % list.length]?.name || '');
   }
 
   function patchFrameCards(frame, map, list) {
@@ -175,11 +189,17 @@
     if (!doc?.head) return;
     ensureFrameStyle(doc);
 
-    const liveGuests = list.filter(guest => guest?.name && guest?.photo);
+    const liveGuests = uniqueGuestList(list);
     const cards = [...doc.querySelectorAll('.carousel-section .guest-card')];
+    const section = doc.querySelector('.carousel-section');
+    if (!liveGuests.length || !cards.length || !section) return;
+
+    const rawOffset = Number(section.__ondaGuestOffset || 0);
+    const offset = ((rawOffset % liveGuests.length) + liveGuests.length) % liveGuests.length;
+    const namesForThisFrame = expectedNames(liveGuests, offset, cards.length);
 
     cards.forEach((card, index) => {
-      const guest = chooseFrameGuest(card, index, map, liveGuests);
+      const guest = liveGuests[(offset + index) % liveGuests.length];
       if (!guest) return;
 
       const name = card.querySelector('.guest-name');
@@ -188,13 +208,6 @@
 
       if (name && name.textContent !== guest.name) name.textContent = guest.name;
       if (label && label.textContent !== guestInitials) label.textContent = guestInitials;
-
-      if (!guest.photo) {
-        card.querySelector('.onda-vitrine-guest-photo')?.remove();
-        delete card.dataset.ondaRealPhoto;
-        delete card.dataset.ondaGuestPhotoKey;
-        return;
-      }
 
       const key = `${guest.name}|${guest.photo}`;
       const currentImage = card.querySelector('.onda-vitrine-guest-photo');
@@ -219,6 +232,9 @@
       card.dataset.ondaRealPhoto = '1';
     });
 
+    section.__ondaExpectedGuestNames = namesForThisFrame;
+    section.__ondaGuestPhotoData = { map, list:liveGuests };
+
     const viewport = doc.querySelector('.clips-row-wrap.onda-carousel-final');
     const container = doc.querySelector('.clips-container-main');
     if (container) {
@@ -230,27 +246,36 @@
       viewport.style.setProperty('margin-right', 'auto', 'important');
     }
 
-    const section = doc.querySelector('.carousel-section');
-    if (section) {
-      section.__ondaGuestPhotoData = { map, list:liveGuests };
-      if (!section.__ondaPhotoObserver) {
-        let timer = 0;
-        const observer = new MutationObserver(() => {
-          clearTimeout(timer);
-          timer = setTimeout(() => {
-            const latest = section.__ondaGuestPhotoData;
-            if (latest) patchFrameCards(frame, latest.map, latest.list);
-          }, 90);
-        });
-        observer.observe(section, { childList:true, subtree:true });
-        section.__ondaPhotoObserver = observer;
-      }
+    if (!section.__ondaPhotoObserver) {
+      let timer = 0;
+      const observer = new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const latest = section.__ondaGuestPhotoData;
+          if (!latest) return;
+          const unique = uniqueGuestList(latest.list);
+          if (!unique.length) return;
+
+          const expected = Array.isArray(section.__ondaExpectedGuestNames) ? section.__ondaExpectedGuestNames : [];
+          const current = [...section.querySelectorAll('.guest-card .guest-name')]
+            .map(node => String(node.textContent || ''));
+          const changedByNativeCarousel = expected.length === current.length && current.some((name, index) => normalize(name) !== normalize(expected[index]));
+
+          if (changedByNativeCarousel && unique.length > 1) {
+            section.__ondaGuestOffset = (Number(section.__ondaGuestOffset || 0) + 1) % unique.length;
+          }
+          patchFrameCards(frame, latest.map, unique);
+        }, 110);
+      });
+      observer.observe(section, { childList:true, subtree:true });
+      section.__ondaPhotoObserver = observer;
     }
   }
 
   function patchFrames(map, list) {
+    const unique = uniqueGuestList(list);
     document.querySelectorAll('iframe.public-vitrine-frame, iframe[src*="/public/vitrine.html"]').forEach(frame => {
-      frame.__ondaGuestPhotoData = { map, list };
+      frame.__ondaGuestPhotoData = { map, list:unique };
       if (frame.dataset.ondaGuestStableWatch !== '1') {
         frame.dataset.ondaGuestStableWatch = '1';
         frame.addEventListener('load', () => {
@@ -260,7 +285,7 @@
           }, 150);
         });
       }
-      patchFrameCards(frame, map, list);
+      patchFrameCards(frame, map, unique);
     });
   }
 
