@@ -55,10 +55,13 @@
     return loading;
   }
 
+  function guestList(data) {
+    return (Array.isArray(data?.guests) ? data.guests : [])
+      .filter(guest => guest?.name);
+  }
+
   function guestMap(data) {
-    return new Map((Array.isArray(data?.guests) ? data.guests : [])
-      .filter(guest => guest?.name)
-      .map(guest => [normalize(guest.name), guest]));
+    return new Map(guestList(data).map(guest => [normalize(guest.name), guest]));
   }
 
   function ensureStyle() {
@@ -84,7 +87,7 @@
     image.loading = 'lazy';
     image.decoding = 'async';
     const proxy = photoUrl(guest.photo);
-    const original = String(guest.photo || '');
+    const original = String(guest.photo || '').trim();
     image.src = proxy || original;
     image.dataset.original = original;
     image.addEventListener('error', () => {
@@ -143,10 +146,13 @@
     const style = doc.createElement('style');
     style.id = FRAME_STYLE_ID;
     style.textContent = `
-      .carousel-section .guest-card[data-onda-real-photo="1"]{background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
-      .carousel-section .guest-card[data-onda-real-photo="1"]::after{background:linear-gradient(to top,rgba(4,10,18,.72) 0%,rgba(4,10,18,.16) 44%,rgba(4,10,18,.02) 76%)!important}
+      .carousel-section .guest-card{position:relative!important;overflow:hidden!important}
+      .carousel-section .guest-card>.onda-vitrine-guest-photo{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;object-fit:cover!important;object-position:center!important;z-index:0!important;pointer-events:none!important}
+      .carousel-section .guest-card[data-onda-real-photo="1"]::after{content:""!important;position:absolute!important;inset:0!important;z-index:1!important;pointer-events:none!important;background:linear-gradient(to top,rgba(4,10,18,.72) 0%,rgba(4,10,18,.16) 44%,rgba(4,10,18,.02) 76%)!important}
       .carousel-section .guest-card[data-onda-real-photo="1"] .guest-initials{opacity:0!important;visibility:hidden!important}
-      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-name{color:#fff!important;opacity:1!important;position:relative!important;z-index:3!important;text-shadow:0 2px 12px rgba(0,0,0,.85)!important}
+      .carousel-section .guest-card .guest-initials{position:relative!important;z-index:2!important}
+      .carousel-section .guest-card .guest-name{position:relative!important;z-index:3!important}
+      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-name{color:#fff!important;opacity:1!important;text-shadow:0 2px 12px rgba(0,0,0,.85)!important}
       html body .bottom-showcase{width:100%!important;justify-content:center!important}
       html body .bottom-showcase .clips-container-main{width:100%!important;align-items:center!important;justify-content:center!important}
       html body .bottom-showcase .clips-row-wrap.onda-carousel-final{margin-left:auto!important;margin-right:auto!important;left:auto!important;right:auto!important}
@@ -155,28 +161,62 @@
     doc.head.appendChild(style);
   }
 
-  function patchFrameCards(frame, map) {
+  function chooseFrameGuest(card, index, map, list) {
+    const currentName = card.querySelector('.guest-name')?.textContent || '';
+    const exact = map.get(normalize(currentName));
+    if (exact) return exact;
+    if (!list.length) return null;
+    return list[index % list.length];
+  }
+
+  function patchFrameCards(frame, map, list) {
     let doc;
     try { doc = frame.contentDocument; } catch { return; }
     if (!doc?.head) return;
     ensureFrameStyle(doc);
 
-    doc.querySelectorAll('.carousel-section .guest-card').forEach(card => {
-      const name = card.querySelector('.guest-name')?.textContent || '';
-      const guest = map.get(normalize(name));
-      if (!guest?.photo) return;
-      const proxy = photoUrl(guest.photo);
+    const liveGuests = list.filter(guest => guest?.name && guest?.photo);
+    const cards = [...doc.querySelectorAll('.carousel-section .guest-card')];
+
+    cards.forEach((card, index) => {
+      const guest = chooseFrameGuest(card, index, map, liveGuests);
+      if (!guest) return;
+
+      const name = card.querySelector('.guest-name');
+      const label = card.querySelector('.guest-initials');
+      const guestInitials = guest.initials || initials(guest.name);
+
+      if (name && name.textContent !== guest.name) name.textContent = guest.name;
+      if (label && label.textContent !== guestInitials) label.textContent = guestInitials;
+
+      if (!guest.photo) {
+        card.querySelector('.onda-vitrine-guest-photo')?.remove();
+        delete card.dataset.ondaRealPhoto;
+        delete card.dataset.ondaGuestPhotoKey;
+        return;
+      }
+
       const key = `${guest.name}|${guest.photo}`;
-      if (card.dataset.ondaGuestPhotoKey === key) return;
+      const currentImage = card.querySelector('.onda-vitrine-guest-photo');
+      if (card.dataset.ondaGuestPhotoKey === key && currentImage) return;
+
+      currentImage?.remove();
+      const image = makeImage(doc, 'onda-vitrine-guest-photo', guest, failed => {
+        failed.remove();
+        delete card.dataset.ondaRealPhoto;
+        delete card.dataset.ondaGuestPhotoKey;
+        if (label) {
+          label.textContent = guestInitials;
+          label.style.removeProperty('opacity');
+          label.style.removeProperty('visibility');
+        }
+      });
+      image.addEventListener('load', () => {
+        card.dataset.ondaRealPhoto = '1';
+      }, { once:true });
+      card.prepend(image);
       card.dataset.ondaGuestPhotoKey = key;
       card.dataset.ondaRealPhoto = '1';
-      const escaped = String(proxy || guest.photo).replace(/"/g, '%22');
-      card.style.setProperty('background-image', `linear-gradient(to top,rgba(4,10,18,.18),rgba(4,10,18,.02) 65%),url("${escaped}")`, 'important');
-      card.style.setProperty('background-position', 'center,center', 'important');
-      card.style.setProperty('background-size', 'cover,cover', 'important');
-      card.style.setProperty('background-repeat', 'no-repeat,no-repeat', 'important');
-      const label = card.querySelector('.guest-initials');
-      if (label && !label.textContent.trim()) label.textContent = guest.initials || initials(guest.name);
     });
 
     const viewport = doc.querySelector('.clips-row-wrap.onda-carousel-final');
@@ -191,24 +231,36 @@
     }
 
     const section = doc.querySelector('.carousel-section');
-    if (section && !section.__ondaPhotoObserver) {
-      let timer = 0;
-      const observer = new MutationObserver(() => {
-        clearTimeout(timer);
-        timer = setTimeout(() => patchFrameCards(frame, map), 80);
-      });
-      observer.observe(section, { childList: true, subtree: true, characterData: true });
-      section.__ondaPhotoObserver = observer;
+    if (section) {
+      section.__ondaGuestPhotoData = { map, list:liveGuests };
+      if (!section.__ondaPhotoObserver) {
+        let timer = 0;
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            const latest = section.__ondaGuestPhotoData;
+            if (latest) patchFrameCards(frame, latest.map, latest.list);
+          }, 90);
+        });
+        observer.observe(section, { childList:true, subtree:true });
+        section.__ondaPhotoObserver = observer;
+      }
     }
   }
 
-  function patchFrames(map) {
+  function patchFrames(map, list) {
     document.querySelectorAll('iframe.public-vitrine-frame, iframe[src*="/public/vitrine.html"]').forEach(frame => {
+      frame.__ondaGuestPhotoData = { map, list };
       if (frame.dataset.ondaGuestStableWatch !== '1') {
         frame.dataset.ondaGuestStableWatch = '1';
-        frame.addEventListener('load', () => setTimeout(() => patchFrameCards(frame, map), 150));
+        frame.addEventListener('load', () => {
+          setTimeout(() => {
+            const latest = frame.__ondaGuestPhotoData;
+            if (latest) patchFrameCards(frame, latest.map, latest.list);
+          }, 150);
+        });
       }
-      patchFrameCards(frame, map);
+      patchFrameCards(frame, map, list);
     });
   }
 
@@ -216,11 +268,12 @@
     ensureStyle();
     try {
       const data = await load(force);
+      const list = guestList(data);
       const map = guestMap(data);
-      if (!map.size) return;
+      if (!list.length) return;
       patchUpcomingShows(map);
       patchDashboardGuests(map);
-      patchFrames(map);
+      patchFrames(map, list);
     } catch {}
   }
 
