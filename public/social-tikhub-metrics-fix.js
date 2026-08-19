@@ -1,5 +1,5 @@
 (() => {
-  const ENDPOINT = '/api/tikhub-metrics-fast';
+  const ENDPOINT = '/tikhub-metrics-v2';
   const REFRESH_MS = 60_000;
   let state = null;
   let stateAt = 0;
