@@ -2,6 +2,8 @@
   const STYLE_ID = 'onda-shorts-20-feed-style';
   const COPIES = 5;
   const CENTER_COPY = 2;
+  const DESKTOP_BREAKPOINT = 1025;
+  const DESKTOP_SLOTS = 5;
 
   const css = `
     .clips-row-wrap.onda-infinite-shorts {
@@ -31,10 +33,37 @@
       margin:0 !important;
     }
 
-    @media (min-width:701px) {
+    /* PC: só existem cinco cards. Os vídeos trocam dentro desses cinco slots. */
+    @media (min-width:1025px) {
+      body .clips-container-main .clips-row-wrap.onda-infinite-shorts.onda-desktop-fixed-five {
+        overflow:hidden !important;
+        width:auto !important;
+        max-width:calc(100vw - 40px) !important;
+      }
+      .clips-row.onda-infinite-shorts-row.onda-desktop-five-slots {
+        width:max-content !important;
+        min-width:0 !important;
+        justify-content:center !important;
+        margin:0 auto !important;
+      }
+      .onda-desktop-five-slots .onda-safe-short .onda-short-poster {
+        transition:opacity .26s ease, transform .26s ease !important;
+      }
+      .onda-desktop-five-slots .onda-safe-short.onda-slot-leave .onda-short-poster {
+        opacity:0 !important;
+        transform:translateX(-18px) scale(1.015) !important;
+      }
+      .onda-desktop-five-slots .onda-safe-short.onda-slot-enter .onda-short-poster {
+        transition:none !important;
+        opacity:0 !important;
+        transform:translateX(18px) scale(1.015) !important;
+      }
+    }
+
+    @media (min-width:701px) and (max-width:1024px) {
       body .clips-container-main .clips-row-wrap.onda-infinite-shorts {
-        width:776px !important;
-        max-width:calc(100vw - 32px) !important;
+        width:calc(100vw - 28px) !important;
+        max-width:calc(100vw - 28px) !important;
       }
     }
 
@@ -107,6 +136,107 @@
     return card;
   }
 
+  function setCardVideo(card, short, visiblePosition) {
+    if (!card || !short?.id) return;
+
+    card.querySelectorAll('iframe.onda-click-player,iframe.onda-short-player,iframe.onda-short-frame').forEach(frame => {
+      try { frame.remove(); } catch {}
+    });
+    card.classList.remove('onda-click-playing', 'onda-click-ready', 'onda-player-ready');
+    card.dataset.ondaShortId = short.id;
+    card.setAttribute('aria-label', `Vídeo ${visiblePosition + 1} do Podcast do Bebezão. Clique para assistir sem áudio.`);
+
+    const poster = card.querySelector('.onda-short-poster');
+    if (poster) {
+      poster.style.removeProperty('display');
+      poster.src = `/short-thumb/${encodeURIComponent(short.id)}`;
+      poster.alt = '';
+    }
+
+    const open = card.querySelector('.onda-short-open');
+    if (open) {
+      open.href = short.url || `https://www.youtube.com/shorts/${encodeURIComponent(short.id)}`;
+      open.setAttribute('aria-label', `Abrir vídeo ${visiblePosition + 1} no YouTube`);
+    }
+  }
+
+  function makeDesktopFiveSlots(viewport, row, shorts, doc) {
+    viewport.classList.add('onda-desktop-fixed-five');
+    row.classList.add('onda-desktop-five-slots');
+    row.replaceChildren();
+
+    for (let index = 0; index < DESKTOP_SLOTS; index += 1) {
+      row.appendChild(makeCard(shorts[index % shorts.length], index, doc, true));
+    }
+
+    let start = 0;
+    let paused = false;
+    let timer = null;
+    let destroyed = false;
+
+    const pause = () => {
+      paused = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const schedule = (delay = 2800) => {
+      if (destroyed) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(rotate, delay);
+    };
+
+    const resume = (delay = 650) => {
+      paused = false;
+      schedule(delay);
+    };
+
+    const rotate = () => {
+      timer = null;
+      if (destroyed || !row.isConnected || !viewport.isConnected) return;
+      if (paused || doc.hidden || row.querySelector('.onda-click-playing,.onda-player-ready')) {
+        schedule(650);
+        return;
+      }
+
+      start = (start + 1) % shorts.length;
+      const cards = Array.from(row.querySelectorAll('.onda-safe-short')).slice(0, DESKTOP_SLOTS);
+
+      cards.forEach((card, slot) => {
+        card.classList.remove('onda-slot-enter');
+        card.classList.add('onda-slot-leave');
+        setTimeout(() => {
+          if (!card.isConnected) return;
+          const short = shorts[(start + slot) % shorts.length];
+          setCardVideo(card, short, slot);
+          card.classList.remove('onda-slot-leave');
+          card.classList.add('onda-slot-enter');
+          void card.offsetWidth;
+          requestAnimationFrame(() => card.classList.remove('onda-slot-enter'));
+        }, 190 + slot * 22);
+      });
+
+      schedule(3000);
+    };
+
+    viewport.addEventListener('mouseenter', pause);
+    viewport.addEventListener('mouseleave', () => resume(700));
+    viewport.addEventListener('focusin', pause);
+    viewport.addEventListener('focusout', event => {
+      if (!viewport.contains(event.relatedTarget)) resume(700);
+    });
+
+    doc.defaultView.addEventListener('beforeunload', () => {
+      destroyed = true;
+      if (timer) clearTimeout(timer);
+    }, { once:true });
+
+    viewport._ondaInfiniteController = { pause, resume };
+    schedule(2600);
+  }
+
   function makeInfiniteCarousel(viewport, row, shorts, doc) {
     let paused = false;
     let resumeTimer = null;
@@ -143,9 +273,6 @@
       if (normalizing) return;
       if (!cycleWidth && !measure()) return;
 
-      // Mantém o usuário sempre dentro da cópia central. Como as 5 cópias são
-      // idênticas, a troca de posição é visualmente imperceptível, inclusive
-      // durante inércia do toque no Chrome/Brave Android.
       const min = cycleWidth * 1.25;
       const max = cycleWidth * 3.75;
       let next = viewport.scrollLeft;
@@ -168,7 +295,6 @@
 
     const tick = now => {
       if (!row.isConnected || !viewport.isConnected) return;
-
       normalize();
 
       const hasPlayingVideo = !!row.querySelector('.onda-click-playing,.onda-player-ready');
@@ -235,7 +361,7 @@
 
   async function mountInfinite(doc) {
     const currentViewport = doc.querySelector('.clips-row-wrap');
-    if (!currentViewport || currentViewport.dataset.ondaInfinite20V2 === '1') return false;
+    if (!currentViewport || currentViewport.dataset.ondaInfinite20V3 === '1') return false;
 
     ensureStyle(doc);
 
@@ -256,34 +382,37 @@
 
     if (shorts.length < 6) return false;
 
-    // Cria 5 cópias completas dos 20 vídeos e começa na cópia central.
-    // Assim nunca existe uma borda física próxima durante o swipe com inércia.
     const viewport = currentViewport.cloneNode(false);
     viewport.className = `${currentViewport.className} onda-infinite-shorts`;
-    viewport.dataset.ondaInfinite20V2 = '1';
+    viewport.dataset.ondaInfinite20V3 = '1';
     viewport.removeAttribute('data-onda-safe-preview');
     viewport.removeAttribute('data-onda-clip-v2');
     viewport.removeAttribute('data-onda-infinite20');
+    viewport.removeAttribute('data-onda-infinite20-v2');
 
     const row = doc.createElement('div');
     row.className = 'clips-row onda-safe-shorts-row onda-infinite-shorts-row';
     viewport.appendChild(row);
 
-    for (let copy = 0; copy < COPIES; copy += 1) {
-      shorts.forEach((short, index) => {
-        const eager = copy === CENTER_COPY && index < 7;
-        row.appendChild(makeCard(short, index, doc, eager));
-      });
+    if (doc.defaultView.innerWidth >= DESKTOP_BREAKPOINT) {
+      makeDesktopFiveSlots(viewport, row, shorts, doc);
+    } else {
+      for (let copy = 0; copy < COPIES; copy += 1) {
+        shorts.forEach((short, index) => {
+          const eager = copy === CENTER_COPY && index < 7;
+          row.appendChild(makeCard(short, index, doc, eager));
+        });
+      }
+      makeInfiniteCarousel(viewport, row, shorts, doc);
     }
 
     currentViewport.replaceWith(viewport);
-    makeInfiniteCarousel(viewport, row, shorts, doc);
     return true;
   }
 
   function watchFrame(frame) {
-    if (!frame || frame.dataset.ondaInfinite20V2Watch === '1') return;
-    frame.dataset.ondaInfinite20V2Watch = '1';
+    if (!frame || frame.dataset.ondaInfinite20V3Watch === '1') return;
+    frame.dataset.ondaInfinite20V3Watch = '1';
 
     let timer = null;
     const attempt = () => {
