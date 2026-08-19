@@ -111,8 +111,6 @@
       return;
     }
 
-    // Remove apenas previews temporários de hover. O novo player nasce do clique do usuário,
-    // o que é mais confiável no Chrome e no Brave para iniciar a reprodução.
     card.querySelectorAll('iframe.onda-short-player,iframe.onda-short-frame').forEach(node => {
       try { node.remove(); } catch {}
     });
@@ -138,8 +136,6 @@
     };
 
     frame.addEventListener('load', () => {
-      // Mantém a thumbnail até o iframe realmente terminar de carregar.
-      // Depois, o player fica visível e interativo dentro do próprio card.
       setTimeout(() => {
         if (!frame.isConnected) return;
         frame.classList.add('is-ready');
@@ -159,9 +155,11 @@
     if (!style) {
       style = doc.createElement('style');
       style.id = STYLE_ID;
+      style.textContent = css;
       doc.head.appendChild(style);
+    } else if (style.textContent !== css) {
+      style.textContent = css;
     }
-    style.textContent = css;
 
     doc.querySelectorAll('.onda-short-index,.onda-short-number').forEach(node => node.remove());
 
@@ -190,13 +188,23 @@
     frame.dataset.ondaShortCleanupWatch = '2';
 
     let observer = null;
+    let scheduled = false;
+    const scheduleClean = doc => {
+      if (scheduled) return;
+      scheduled = true;
+      queueMicrotask(() => {
+        scheduled = false;
+        clean(doc);
+      });
+    };
+
     const apply = () => {
       try {
         const doc = frame.contentDocument;
         if (!doc?.documentElement) return;
         clean(doc);
         if (!observer) {
-          observer = new MutationObserver(() => clean(doc));
+          observer = new MutationObserver(() => scheduleClean(doc));
           observer.observe(doc.documentElement, { childList:true, subtree:true });
         }
       } catch {}
@@ -205,6 +213,7 @@
     frame.addEventListener('load', () => {
       observer?.disconnect();
       observer = null;
+      scheduled = false;
       apply();
       setTimeout(apply, 500);
       setTimeout(apply, 1200);
