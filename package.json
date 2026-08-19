@@ -1,0 +1,17 @@
+{
+  "name": "onda-studio-os",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "node build.mjs",
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "type": "module"
+}

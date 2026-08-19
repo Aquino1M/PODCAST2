@@ -1,0 +1,434 @@
+{
+  "agenda": [
+    [
+      "16:30",
+      "HOJE",
+      "Equipe Arena 90",
+      "A9",
+      "blue",
+      "Passagem de pauta e técnica",
+      "16:15",
+      "Confirmado",
+      "Testar retorno do telão e VT de abertura.",
+      "msknzv58-2gxy6c"
+    ],
+    [
+      "20:00",
+      "HOJE",
+      "Rafael Bastos",
+      "RB",
+      "blue",
+      "ARENA 90 · Estúdio A",
+      "18:45",
+      "Pendente",
+      "Carro enviado. Assessoria acompanha.",
+      "msknzv58-rwci67",
+      "Sim"
+    ],
+    [
+      "10:00",
+      "AMANHÃ",
+      "Dra. Marina Alves",
+      "MA",
+      "green",
+      "Sem Filtro · Reunião prévia",
+      "09:45",
+      "Pendente",
+      "Aguardando confirmação da assessoria.",
+      "msknzv58-vn9avo"
+    ],
+    [
+      "18:30",
+      "15 AGO",
+      "Dra. Marina Alves",
+      "MA",
+      "green",
+      "SEM FILTRO · Estúdio B",
+      "17:50",
+      "Pendente",
+      "Reservar sala de maquiagem.",
+      "msknzv58-ofje86",
+      "Sim"
+    ],
+    [
+      "20:00",
+      "16 AGO",
+      "Léo Santana Jr.",
+      "LS",
+      "rose",
+      "FREQUÊNCIA · Estúdio A",
+      "19:00",
+      "Confirmado",
+      "Banda com 4 integrantes. Rider aprovado.",
+      "msknzv58-ty1rmu",
+      "Sim"
+    ],
+    [
+      "14:00",
+      "17 AGO",
+      "Coletiva de produção",
+      "CP",
+      "blue",
+      "Ponto de Vista",
+      "13:55",
+      "Cancelado",
+      "Remarcar para a próxima segunda.",
+      "msknzv58-d7nl5v"
+    ],
+    [
+      "19:30",
+      "12 AGO",
+      "Camila Tavares",
+      "CT",
+      "violet",
+      "PONTO DE VISTA",
+      "",
+      "Confirmado",
+      "Importado da antiga grade.",
+      "mskr4yjd-lj94ih",
+      "Sim"
+    ],
+    [
+      "21:00",
+      "13 AGO",
+      "MC Kadu",
+      "MK",
+      "orange",
+      "FREQUÊNCIA",
+      "",
+      "Confirmado",
+      "Importado da antiga grade.",
+      "mskr4yjd-7wetsa",
+      "Sim"
+    ]
+  ],
+  "guests": [
+    [
+      "Rafael Bastos",
+      "RB",
+      "Esporte",
+      "Comentarista esportivo",
+      "@rafaelbastos",
+      "(11) 99842-1930",
+      "3",
+      "HOJE",
+      "Confirmado",
+      "blue",
+      "msknzv58-w0rvpo"
+    ],
+    [
+      "Camila Tavares",
+      "CT",
+      "Política",
+      "Deputada e advogada",
+      "@camilatavares",
+      "(61) 99128-5520",
+      "1",
+      "12 set",
+      "Ativo",
+      "violet",
+      "msknzv58-4qvbu0"
+    ],
+    [
+      "MC Kadu",
+      "MK",
+      "Música",
+      "Artista e compositor",
+      "@mckaduoficial",
+      "(21) 98812-4021",
+      "2",
+      "13 ago",
+      "Ativo",
+      "orange",
+      "msknzv58-5o0hbg"
+    ],
+    [
+      "Dra. Marina Alves",
+      "MA",
+      "Negócios",
+      "Fundadora da Vitalis",
+      "@marinaalves",
+      "(11) 99672-8831",
+      "0",
+      "Amanhã",
+      "Pendente",
+      "green",
+      "msknzv58-vlinkj"
+    ],
+    [
+      "Léo Santana Jr.",
+      "LS",
+      "Música",
+      "Cantor e produtor",
+      "@leosantanajr",
+      "(71) 99201-7833",
+      "4",
+      "16 ago",
+      "Ativo",
+      "rose",
+      "msknzv58-fqp4cl"
+    ],
+    [
+      "Bruno Mendonça",
+      "BM",
+      "Esporte",
+      "Técnico de futebol",
+      "@brunomendonca",
+      "(31) 99741-2690",
+      "2",
+      "Sem data",
+      "Em contato",
+      "blue",
+      "msknzv58-sjs0ek"
+    ]
+  ],
+  "sponsors": [
+    [
+      "NovaBet",
+      "NB",
+      "Esportes & entretenimento",
+      "violet",
+      "Ativo",
+      "R$ 42.000/mês",
+      "Mai — Ago 2026",
+      18,
+      22,
+      "novabet",
+      "Renata · (11) 98821-2001",
+      "22 ago",
+      "msknzv58-b9xrlc"
+    ],
+    [
+      "Piracanjuba",
+      "TR",
+      "Tecnologia e áudio",
+      "rose",
+      "Ativo",
+      "R$ 28.500/mês",
+      "Jul — Dez 2026",
+      9,
+      12,
+      "tronicbr",
+      "Caio · (11) 97745-8130",
+      "18 dez",
+      "msknzv58-emd70g",
+      "",
+      "",
+      "/public/uploads/c556648c95b440a0752f6603.webp"
+    ],
+    [
+      "Grão Nativo",
+      "GN",
+      "Alimentos & bebidas",
+      "orange",
+      "Renovação",
+      "R$ 18.000/mês",
+      "Fev — Ago 2026",
+      24,
+      24,
+      "graonativo",
+      "Bia · (19) 99402-0192",
+      "30 ago",
+      "msknzv58-zc4m08"
+    ],
+    [
+      "Move+",
+      "M+",
+      "Mobilidade urbana",
+      "green",
+      "Ativo",
+      "R$ 15.000/mês",
+      "Ago — Jan 2027",
+      4,
+      10,
+      "movemais",
+      "Leo · (21) 98277-6104",
+      "31 jan",
+      "msknzv58-gheoy4"
+    ]
+  ],
+  "programs": [
+    [
+      "Arena 90",
+      "A90",
+      "ESPORTE",
+      "AO VIVO",
+      "blue",
+      "No ar",
+      "Debates, bastidores e as vozes mais importantes do futebol nacional.",
+      "Quartas · 20:00",
+      "Caio Lima",
+      [
+        "CL",
+        "MF",
+        "TN",
+        "RA"
+      ],
+      "msknzv58-zdn2zp"
+    ],
+    [
+      "Ponto de Vista",
+      "PV",
+      "ENTREVISTAS",
+      "ORIGINAL ONDA",
+      "violet",
+      "Ativo",
+      "Conversas profundas com políticos, artistas, empresários e personagens do Brasil.",
+      "Segundas · 19:30",
+      "Lia Nunes",
+      [
+        "LN",
+        "BG",
+        "AS"
+      ],
+      "msknzv58-tdz7im"
+    ],
+    [
+      "Frequência",
+      "FQ",
+      "MÚSICA",
+      "SESSIONS",
+      "orange",
+      "Ativo",
+      "Música ao vivo, processo criativo e histórias de quem move a cena.",
+      "Sextas · 20:00",
+      "Beto Sá",
+      [
+        "BS",
+        "CP",
+        "MR",
+        "JV"
+      ],
+      "msknzv58-cetood"
+    ],
+    [
+      "Sem Filtro",
+      "SF",
+      "NEGÓCIOS & CULTURA",
+      "NOVO",
+      "green",
+      "Pré-produção",
+      "Ideias que transformam mercado, comportamento, saúde e cultura.",
+      "Quintas · 18:30",
+      "Nina Rocha",
+      [
+        "NR",
+        "FL",
+        "GC"
+      ],
+      "msknzv58-tsa47w"
+    ]
+  ],
+  "finance": [
+    [
+      "Patrocínio NovaBet",
+      "Receita recorrente",
+      "12 ago",
+      "Recebido",
+      "income",
+      "R$ 42.000,00",
+      "msknzv58-b4wig8"
+    ],
+    [
+      "Folha de produção",
+      "Equipe",
+      "10 ago",
+      "Pago",
+      "expense",
+      "R$ 21.840,00",
+      "msknzv58-sws5q7"
+    ],
+    [
+      "Patrocínio Tronic",
+      "Receita recorrente",
+      "09 ago",
+      "Recebido",
+      "income",
+      "R$ 28.500,00",
+      "msknzv58-xsa6bn"
+    ],
+    [
+      "Cachê musical · Frequência",
+      "Cachês",
+      "08 ago",
+      "A pagar",
+      "expense",
+      "R$ 6.500,00",
+      "msknzv58-2llyr8"
+    ]
+  ],
+  "tasks": [
+    [
+      "Pesquisa sobre nova regulação esportiva",
+      "Arena 90",
+      "PAUTA",
+      "MF",
+      "Hoje",
+      0,
+      "blue",
+      "msknzv58-vo547t"
+    ],
+    [
+      "Briefing de perguntas · Camila Tavares",
+      "Ponto de Vista",
+      "PESQUISA",
+      "AS",
+      "Amanhã",
+      0,
+      "violet",
+      "msknzv58-fz9uys"
+    ],
+    [
+      "Editar teaser do episódio #142",
+      "Frequência",
+      "VÍDEO",
+      "JV",
+      "Hoje, 17h",
+      1,
+      "orange",
+      "msknzv58-hsphcx"
+    ],
+    [
+      "Aprovar roteiro de inserção NovaBet",
+      "Arena 90",
+      "COMERCIAL",
+      "RA",
+      "Hoje",
+      1,
+      "green",
+      "msknzv58-o8bsud"
+    ],
+    [
+      "Cortes verticais · MC Kadu",
+      "Frequência",
+      "SOCIAL",
+      "CP",
+      "16 ago",
+      2,
+      "orange",
+      "msknzv58-7ndxr4"
+    ],
+    [
+      "Thumbnail principal do episódio",
+      "Sem Filtro",
+      "DESIGN",
+      "TN",
+      "17 ago",
+      2,
+      "blue",
+      "msknzv58-csamkc"
+    ],
+    [
+      "Entrevista com Rafael Bastos",
+      "Arena 90",
+      "EPISÓDIO",
+      "CL",
+      "12 ago",
+      3,
+      "violet",
+      "msknzv58-c1sk8c"
+    ]
+  ],
+  "members": [],
+  "shows": []
+}
