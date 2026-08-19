@@ -2,7 +2,7 @@
   const STYLE_ID = 'onda-vitrine-layout-fix';
 
   const css = `
-    /* Área inferior: enquanto os vídeos não forem publicados. */
+    /* Cards de vídeos em destaque: mantêm os quadrados e rolam lateralmente. */
     .clips-container-main {
       width: 100% !important;
       max-width: none !important;
@@ -11,43 +11,59 @@
     .clips-row-wrap {
       width: 100% !important;
       max-width: none !important;
-      overflow: hidden !important;
-      justify-content: center !important;
-      padding: 24px 0 18px !important;
+      overflow-x: hidden !important;
+      overflow-y: visible !important;
+      justify-content: flex-start !important;
+      padding: 18px 0 20px !important;
       margin: 0 !important;
     }
     .clips-row {
-      width: 100% !important;
+      width: max-content !important;
       max-width: none !important;
-      min-width: 0 !important;
+      min-width: max-content !important;
       display: flex !important;
-      justify-content: center !important;
+      flex-wrap: nowrap !important;
+      justify-content: flex-start !important;
       align-items: center !important;
+      gap: 18px !important;
       margin: 0 !important;
       padding: 0 12px !important;
     }
-    .clips-coming-soon {
-      width: min(100%, 620px);
-      min-height: 118px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
-      border-radius: 24px;
-      border: 1px solid var(--border-light, rgba(148,163,184,.18));
-      background: var(--bg-card, rgba(255,255,255,.82));
-      color: var(--text-primary, #0F172A);
-      box-shadow: var(--shadow-soft, 0 12px 28px rgba(15,23,42,.08));
-      font-size: clamp(17px, 2.2vw, 24px);
-      font-weight: 800;
-      letter-spacing: -.02em;
+    .row-clip-card,
+    .row-clip-card.featured {
+      position: relative !important;
+      width: 112px !important;
+      height: 118px !important;
+      flex: 0 0 112px !important;
+      margin: 0 !important;
+      border-radius: 20px !important;
+      transform: none !important;
+      overflow: hidden !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
     }
-    body.dark-mode .clips-coming-soon {
-      background: rgba(15,23,42,.78);
-      color: #F8FAFC;
-      border-color: rgba(148,163,184,.16);
-      box-shadow: 0 14px 32px rgba(0,0,0,.22);
+    .row-clip-card.onda-coming-card .row-clip-initial,
+    .row-clip-card.onda-coming-card .row-clip-name,
+    .row-clip-card.onda-coming-card .row-clip-play,
+    .row-clip-card.onda-coming-card .premium-play {
+      display: none !important;
+    }
+    .clip-soon-label {
+      position: absolute !important;
+      inset: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 10px !important;
+      color: #fff !important;
+      font-size: 13px !important;
+      font-weight: 800 !important;
+      letter-spacing: .02em !important;
+      text-align: center !important;
+      text-shadow: 0 2px 8px rgba(0,0,0,.45) !important;
+      z-index: 4 !important;
+      pointer-events: none !important;
     }
 
     /* PC: ocupa a largura toda até o final. */
@@ -114,22 +130,74 @@
       .clips-row-wrap {
         width: 100% !important;
         margin: 0 !important;
-        padding: 18px 0 14px !important;
+        padding: 16px 0 16px !important;
       }
-      .clips-coming-soon {
-        width: calc(100% - 20px);
-        min-height: 104px;
-        border-radius: 20px;
-        font-size: 18px;
+      .clips-row {
+        gap: 14px !important;
+        padding: 0 8px !important;
+      }
+      .row-clip-card,
+      .row-clip-card.featured {
+        width: 96px !important;
+        height: 104px !important;
+        flex: 0 0 96px !important;
+        border-radius: 18px !important;
+      }
+      .clip-soon-label {
+        font-size: 12px !important;
       }
     }
   `;
 
-  function showComingSoon(doc) {
+  function markVideoCards(doc) {
     const row = doc.querySelector('.clips-row');
-    if (!row || row.dataset.ondaComingSoon === '1') return;
-    row.dataset.ondaComingSoon = '1';
-    row.innerHTML = '<div class="clips-coming-soon" role="status">Em breve vídeos</div>';
+    if (!row) return [];
+    const cards = Array.from(row.querySelectorAll('.row-clip-card'));
+    cards.forEach(card => {
+      card.classList.add('onda-coming-card');
+      if (!card.querySelector('.clip-soon-label')) {
+        const label = doc.createElement('span');
+        label.className = 'clip-soon-label';
+        label.textContent = 'Em breve';
+        card.appendChild(label);
+      }
+    });
+    return cards;
+  }
+
+  function startClipLoop(doc) {
+    const viewport = doc.querySelector('.clips-row-wrap');
+    const row = doc.querySelector('.clips-row');
+    if (!viewport || !row || viewport.dataset.ondaAutoScroll === '1') return;
+
+    const original = markVideoCards(doc);
+    if (!original.length) return;
+    viewport.dataset.ondaAutoScroll = '1';
+
+    if (original.length > 1) {
+      original.forEach(card => row.appendChild(card.cloneNode(true)));
+    }
+
+    let paused = false;
+    let last = performance.now();
+    const half = () => row.scrollWidth / 2;
+
+    const tick = now => {
+      if (!doc.defaultView || !doc.body.isConnected) return;
+      if (!paused && !doc.hidden && row.scrollWidth > viewport.clientWidth) {
+        viewport.scrollLeft += Math.min(1.15, Math.max(.35, (now - last) * 0.032));
+        const limit = half();
+        if (limit > 0 && viewport.scrollLeft >= limit) viewport.scrollLeft -= limit;
+      }
+      last = now;
+      doc.defaultView.requestAnimationFrame(tick);
+    };
+
+    viewport.addEventListener('mouseenter', () => { paused = true; });
+    viewport.addEventListener('mouseleave', () => { paused = false; });
+    viewport.addEventListener('touchstart', () => { paused = true; }, { passive: true });
+    viewport.addEventListener('touchend', () => { setTimeout(() => { paused = false; }, 1200); }, { passive: true });
+    doc.defaultView.requestAnimationFrame(tick);
   }
 
   function startSocialCarousel(doc) {
@@ -145,18 +213,13 @@
     const isMobile = () => (doc.defaultView?.innerWidth || 9999) <= 700;
     const cards = () => Array.from(grid.querySelectorAll('.platform-card'));
 
-    const centeredLeft = card => {
-      return Math.max(0, card.offsetLeft - (grid.clientWidth - card.clientWidth) / 2);
-    };
+    const centeredLeft = card => Math.max(0, card.offsetLeft - (grid.clientWidth - card.clientWidth) / 2);
 
     const goTo = (nextIndex, smooth = true) => {
       const list = cards();
       if (!list.length || !isMobile()) return;
       index = ((nextIndex % list.length) + list.length) % list.length;
-      grid.scrollTo({
-        left: centeredLeft(list[index]),
-        behavior: smooth ? 'smooth' : 'auto'
-      });
+      grid.scrollTo({ left: centeredLeft(list[index]), behavior: smooth ? 'smooth' : 'auto' });
     };
 
     const stop = () => {
@@ -207,12 +270,6 @@
     grid.addEventListener('touchstart', pauseForUser, { passive: true });
     grid.addEventListener('touchend', resumeAfterUser, { passive: true });
     grid.addEventListener('touchcancel', resumeAfterUser, { passive: true });
-    grid.addEventListener('pointerdown', event => {
-      if (event.pointerType !== 'mouse') pauseForUser();
-    }, { passive: true });
-    grid.addEventListener('pointerup', event => {
-      if (event.pointerType !== 'mouse') resumeAfterUser();
-    }, { passive: true });
 
     doc.defaultView?.addEventListener('resize', () => {
       stop();
@@ -238,7 +295,7 @@
         style.textContent = css;
         doc.head.appendChild(style);
       }
-      showComingSoon(doc);
+      startClipLoop(doc);
       startSocialCarousel(doc);
     } catch (_) {}
   }
