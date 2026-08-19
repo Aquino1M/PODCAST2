@@ -1,9 +1,11 @@
 (() => {
-  const STYLE_ID = 'onda-guest-photo-fix-style';
-  const FRAME_STYLE_ID = 'onda-public-guest-photo-style';
-  let showcase = null;
-  let showcaseAt = 0;
-  let scheduled = false;
+  const STYLE_ID = 'onda-guest-photo-stable-style';
+  const FRAME_STYLE_ID = 'onda-vitrine-guest-photo-stable-style';
+  const CACHE_MS = 60_000;
+  let cache = null;
+  let cacheAt = 0;
+  let loading = null;
+  let refreshTimer = 0;
 
   const normalize = value => String(value || '')
     .normalize('NFD')
@@ -27,9 +29,9 @@
       const marker = '/storage/v1/object/public/podcast-media/';
       const index = url.pathname.indexOf(marker);
       if (index >= 0) {
-        const name = decodeURIComponent(url.pathname.slice(index + marker.length));
-        if (/^[a-zA-Z0-9._-]{1,180}\.(?:png|jpe?g|webp)$/i.test(name)) {
-          return `/guest-photo/${encodeURIComponent(name)}`;
+        const file = decodeURIComponent(url.pathname.slice(index + marker.length));
+        if (/^[a-zA-Z0-9._-]{1,180}\.(?:png|jpe?g|webp)$/i.test(file)) {
+          return `/guest-photo/${encodeURIComponent(file)}`;
         }
       }
       return url.href;
@@ -38,296 +40,200 @@
     }
   }
 
-  async function loadShowcase(force = false) {
-    if (!force && showcase && Date.now() - showcaseAt < 30_000) return showcase;
-    const response = await fetch('/api/public/showcase', { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Showcase ${response.status}`);
-    showcase = await response.json();
-    showcaseAt = Date.now();
-    return showcase;
+  async function load(force = false) {
+    if (!force && cache && Date.now() - cacheAt < CACHE_MS) return cache;
+    if (loading) return loading;
+    loading = fetch('/api/public/showcase', { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error(`Showcase ${response.status}`);
+        const data = await response.json();
+        cache = data;
+        cacheAt = Date.now();
+        return data;
+      })
+      .finally(() => { loading = null; });
+    return loading;
   }
 
   function guestMap(data) {
     return new Map((Array.isArray(data?.guests) ? data.guests : [])
-      .filter(item => item?.name)
-      .map(item => [normalize(item.name), item]));
+      .filter(guest => guest?.name)
+      .map(guest => [normalize(guest.name), guest]));
   }
 
-  function frameDataKey(data) {
-    return (Array.isArray(data?.guests) ? data.guests : [])
-      .map(item => `${item?.name || ''}|${item?.initials || ''}|${item?.photo || ''}`)
-      .join('||');
-  }
-
-  function makeImage(guest) {
-    const image = document.createElement('img');
-    image.loading = 'lazy';
-    image.decoding = 'async';
-    image.alt = `Foto de ${guest.name || 'convidado'}`;
-    const proxy = photoUrl(guest.photo);
-    image.dataset.ondaOriginalPhoto = String(guest.photo || '');
-    image.src = proxy || String(guest.photo || '');
-    image.addEventListener('error', () => {
-      const original = image.dataset.ondaOriginalPhoto || '';
-      if (original && image.dataset.ondaOriginalTried !== '1') {
-        image.dataset.ondaOriginalTried = '1';
-        image.src = original;
-        return;
-      }
-      const media = image.closest('.guest-media');
-      if (media) {
-        media.dataset.photoFailed = '1';
-        const label = media.closest('[data-collection="guests"]')?.querySelector('h3,strong')?.textContent || guest.name;
-        const fallback = document.createElement('b');
-        fallback.textContent = guest.initials || initials(label);
-        media.replaceChildren(fallback);
-      }
-    });
-    return image;
-  }
-
-  function patchInternal(data) {
-    const map = guestMap(data);
-    if (!map.size) return;
-
-    document.querySelectorAll('.dashboard-guest[data-collection="guests"], .person-card[data-collection="guests"]').forEach(card => {
-      const name = card.querySelector('strong, h3')?.textContent || '';
-      const guest = map.get(normalize(name));
-      if (!guest?.photo) return;
-      const media = card.querySelector('.guest-media');
-      if (!media) return;
-      const desired = photoUrl(guest.photo);
-      const current = media.querySelector('img');
-      if (current && (current.getAttribute('src') === desired || current.dataset.ondaOriginalPhoto === String(guest.photo))) {
-        media.dataset.ondaGuestPhoto = '1';
-        return;
-      }
-      delete media.dataset.photoFailed;
-      media.replaceChildren(makeImage(guest));
-      media.dataset.ondaGuestPhoto = '1';
-    });
-  }
-
-  function injectInternalStyle() {
+  function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      .dashboard-guest .guest-media[data-onda-guest-photo="1"] img,
-      .person-card .guest-media[data-onda-guest-photo="1"] img {
-        width:100%!important;height:100%!important;display:block!important;
-        object-fit:cover!important;object-position:center!important;
-      }
-      .dashboard-guest .dashboard-guest-photo[data-onda-guest-photo="1"] {
-        width:100%!important;height:176px!important;
-      }
-      @media(max-width:560px){
-        .dashboard-guest .dashboard-guest-photo[data-onda-guest-photo="1"]{height:155px!important}
-      }
+      .show-visual[data-onda-guest-photo="1"]{position:relative!important;overflow:hidden!important;background-image:none!important}
+      .show-visual[data-onda-guest-photo="1"]>.onda-show-guest-photo{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;object-fit:cover!important;object-position:center!important;z-index:0!important}
+      .show-visual[data-onda-guest-photo="1"]::after{content:""!important;position:absolute!important;inset:0!important;z-index:1!important;pointer-events:none!important;background:linear-gradient(180deg,rgba(8,12,24,.12),rgba(8,12,24,.08) 48%,rgba(8,12,24,.46))!important}
+      .show-visual[data-onda-guest-photo="1"]>small,.show-visual[data-onda-guest-photo="1"]>.dots,.show-visual[data-onda-guest-photo="1"]>.status{position:relative!important;z-index:2!important}
+      .show-visual[data-onda-guest-photo="1"]>.show-monogram{opacity:0!important;visibility:hidden!important}
+      .dashboard-guest .dashboard-guest-photo[data-onda-guest-photo="1"],.person-card .guest-media[data-onda-guest-photo="1"]{position:relative!important;overflow:hidden!important}
+      .dashboard-guest .dashboard-guest-photo[data-onda-guest-photo="1"]>.onda-dashboard-guest-photo,.person-card .guest-media[data-onda-guest-photo="1"]>.onda-dashboard-guest-photo{width:100%!important;height:100%!important;display:block!important;object-fit:cover!important;object-position:center!important}
     `;
     document.head.appendChild(style);
   }
 
-  function disableLegacyCarousel(doc) {
-    if (doc.documentElement.dataset.ondaGuestLegacyDisabled === '1') return;
-    doc.documentElement.dataset.ondaGuestLegacyDisabled = '1';
-    const script = doc.createElement('script');
-    script.textContent = `
-      try { clearInterval(carouselInterval); carouselInterval = null; } catch (_) {}
-      try { updateCarousel = function(){}; } catch (_) {}
-      try { startCarouselAutoRotation = function(){}; } catch (_) {}
-      try { resetCarouselTimer = function(){}; } catch (_) {}
-    `;
-    doc.documentElement.appendChild(script);
-    script.remove();
+  function makeImage(doc, className, guest, onFail) {
+    const image = doc.createElement('img');
+    image.className = className;
+    image.alt = `Foto de ${guest.name || 'convidado'}`;
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    const proxy = photoUrl(guest.photo);
+    const original = String(guest.photo || '');
+    image.src = proxy || original;
+    image.dataset.original = original;
+    image.addEventListener('error', () => {
+      if (original && image.dataset.originalTried !== '1' && image.src !== original) {
+        image.dataset.originalTried = '1';
+        image.src = original;
+        return;
+      }
+      onFail?.(image);
+    });
+    return image;
+  }
+
+  function patchUpcomingShows(map) {
+    document.querySelectorAll('.show-card').forEach(card => {
+      const name = card.querySelector('.show-meta h3, h3')?.textContent || '';
+      const guest = map.get(normalize(name));
+      const visual = card.querySelector('.show-visual');
+      if (!visual || !guest?.photo) return;
+      const key = `${guest.name}|${guest.photo}`;
+      if (visual.dataset.ondaGuestPhotoKey === key && visual.querySelector('.onda-show-guest-photo')) return;
+      visual.querySelector('.onda-show-guest-photo')?.remove();
+      const image = makeImage(document, 'onda-show-guest-photo', guest, failed => {
+        failed.remove();
+        delete visual.dataset.ondaGuestPhoto;
+        delete visual.dataset.ondaGuestPhotoKey;
+      });
+      visual.prepend(image);
+      visual.dataset.ondaGuestPhoto = '1';
+      visual.dataset.ondaGuestPhotoKey = key;
+    });
+  }
+
+  function patchDashboardGuests(map) {
+    document.querySelectorAll('.dashboard-guest[data-collection="guests"], .person-card[data-collection="guests"]').forEach(card => {
+      const name = card.querySelector('strong, h3')?.textContent || '';
+      const guest = map.get(normalize(name));
+      if (!guest?.photo) return;
+      const media = card.querySelector('.dashboard-guest-photo, .guest-media');
+      if (!media) return;
+      const key = `${guest.name}|${guest.photo}`;
+      if (media.dataset.ondaGuestPhotoKey === key && media.querySelector('.onda-dashboard-guest-photo')) return;
+      const image = makeImage(document, 'onda-dashboard-guest-photo', guest, failed => {
+        failed.remove();
+        delete media.dataset.ondaGuestPhoto;
+        delete media.dataset.ondaGuestPhotoKey;
+      });
+      media.replaceChildren(image);
+      media.dataset.ondaGuestPhoto = '1';
+      media.dataset.ondaGuestPhotoKey = key;
+    });
   }
 
   function ensureFrameStyle(doc) {
-    if (doc.getElementById(FRAME_STYLE_ID)) return;
+    if (!doc?.head || doc.getElementById(FRAME_STYLE_ID)) return;
     const style = doc.createElement('style');
     style.id = FRAME_STYLE_ID;
     style.textContent = `
-      .carousel-section .guest-card[data-onda-real-photo="1"] {
-        background-position:center!important;
-        background-size:cover!important;
-        background-repeat:no-repeat!important;
-      }
-      .carousel-section .guest-card[data-onda-real-photo="1"]::after {
-        background:linear-gradient(to top,rgba(4,10,18,.76) 0%,rgba(4,10,18,.24) 38%,rgba(4,10,18,.04) 72%)!important;
-      }
-      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-initials {
-        opacity:0!important;
-        visibility:hidden!important;
-      }
-      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-name {
-        color:#fff!important;
-        opacity:1!important;
-        position:relative!important;
-        z-index:3!important;
-        text-shadow:0 2px 12px rgba(0,0,0,.85)!important;
-      }
+      .carousel-section .guest-card[data-onda-real-photo="1"]{background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
+      .carousel-section .guest-card[data-onda-real-photo="1"]::after{background:linear-gradient(to top,rgba(4,10,18,.72) 0%,rgba(4,10,18,.16) 44%,rgba(4,10,18,.02) 76%)!important}
+      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-initials{opacity:0!important;visibility:hidden!important}
+      .carousel-section .guest-card[data-onda-real-photo="1"] .guest-name{color:#fff!important;opacity:1!important;position:relative!important;z-index:3!important;text-shadow:0 2px 12px rgba(0,0,0,.85)!important}
+      html body .bottom-showcase{width:100%!important;justify-content:center!important}
+      html body .bottom-showcase .clips-container-main{width:100%!important;align-items:center!important;justify-content:center!important}
+      html body .bottom-showcase .clips-row-wrap.onda-carousel-final{margin-left:auto!important;margin-right:auto!important;left:auto!important;right:auto!important}
+      @media(min-width:1025px){html body .bottom-showcase .clips-row-wrap.onda-carousel-final.onda-carousel-desktop{width:min(1000px,calc(100vw - 48px))!important;max-width:min(1000px,calc(100vw - 48px))!important}}
     `;
     doc.head.appendChild(style);
   }
 
-  function createFrameController(frame, data) {
-    const doc = frame.contentDocument;
-    if (!doc?.documentElement) return null;
+  function patchFrameCards(frame, map) {
+    let doc;
+    try { doc = frame.contentDocument; } catch { return; }
+    if (!doc?.head) return;
     ensureFrameStyle(doc);
-    disableLegacyCarousel(doc);
 
-    const cards = Array.from(doc.querySelectorAll('.carousel-section .guest-card'));
-    if (!cards.length) return null;
-    const guests = (Array.isArray(data?.guests) ? data.guests : []).filter(item => item?.name);
-    if (!guests.length) return null;
+    doc.querySelectorAll('.carousel-section .guest-card').forEach(card => {
+      const name = card.querySelector('.guest-name')?.textContent || '';
+      const guest = map.get(normalize(name));
+      if (!guest?.photo) return;
+      const proxy = photoUrl(guest.photo);
+      const key = `${guest.name}|${guest.photo}`;
+      if (card.dataset.ondaGuestPhotoKey === key) return;
+      card.dataset.ondaGuestPhotoKey = key;
+      card.dataset.ondaRealPhoto = '1';
+      const escaped = String(proxy || guest.photo).replace(/"/g, '%22');
+      card.style.setProperty('background-image', `linear-gradient(to top,rgba(4,10,18,.18),rgba(4,10,18,.02) 65%),url("${escaped}")`, 'important');
+      card.style.setProperty('background-position', 'center,center', 'important');
+      card.style.setProperty('background-size', 'cover,cover', 'important');
+      card.style.setProperty('background-repeat', 'no-repeat,no-repeat', 'important');
+      const label = card.querySelector('.guest-initials');
+      if (label && !label.textContent.trim()) label.textContent = guest.initials || initials(guest.name);
+    });
 
-    const previous = frame.__ondaGuestPhotoController;
-    if (previous?.destroy) previous.destroy();
-
-    let center = Math.min(2, guests.length - 1);
-    let paused = false;
-    let timer = 0;
-    let enforceTimer = 0;
-    const offsets = [-2, -1, 0, 1, 2];
-
-    const guestAt = index => {
-      const total = guests.length;
-      return guests[((index % total) + total) % total];
-    };
-
-    const renderCard = (card, guest) => {
-      if (!card || !guest) return;
-      const name = card.querySelector('.guest-name');
-      const initial = card.querySelector('.guest-initials');
-      const key = `${guest.name}|${guest.photo || ''}`;
-      card.dataset.ondaGuestKey = key;
-      if (name && name.textContent !== String(guest.name || '')) name.textContent = guest.name || '';
-      if (initial) {
-        const text = guest.initials || initials(guest.name);
-        if (initial.textContent !== text) initial.textContent = text;
-      }
-
-      if (guest.photo) {
-        const proxy = photoUrl(guest.photo);
-        const original = String(guest.photo || '').replace(/"/g, '%22');
-        const proxied = String(proxy || '').replace(/"/g, '%22');
-        const images = proxy && proxy !== guest.photo
-          ? `url("${proxied}"), url("${original}")`
-          : `url("${original}")`;
-        const background = `linear-gradient(to top,rgba(4,10,18,.28),rgba(4,10,18,.02) 62%), ${images}`;
-        card.dataset.ondaRealPhoto = '1';
-        card.style.setProperty('background-image', background, 'important');
-        card.style.setProperty('background-position', 'center, center, center', 'important');
-        card.style.setProperty('background-size', 'cover, cover, cover', 'important');
-        card.style.setProperty('background-repeat', 'no-repeat, no-repeat, no-repeat', 'important');
-      } else {
-        card.dataset.ondaRealPhoto = '0';
-        card.style.removeProperty('background-image');
-        card.style.removeProperty('background-position');
-        card.style.removeProperty('background-size');
-        card.style.removeProperty('background-repeat');
-      }
-      card.style.opacity = '1';
-      card.style.transform = '';
-    };
-
-    const render = () => cards.forEach((card, slot) => renderCard(card, guestAt(center + (offsets[slot] ?? slot - 2))));
-    const schedule = () => {
-      clearInterval(timer);
-      timer = setInterval(() => {
-        if (paused || doc.hidden) return;
-        center = (center + 1) % guests.length;
-        render();
-      }, 4000);
-    };
-
-    const onClick = event => {
-      const button = event.target.closest('.carousel-section .nav-btn');
-      if (!button) return;
-      const nav = Array.from(doc.querySelectorAll('.carousel-section .nav-btn'));
-      const direction = button === nav[0] ? -1 : 1;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      center = (center + direction + guests.length) % guests.length;
-      render();
-      schedule();
-    };
-    doc.addEventListener('click', onClick, true);
+    const viewport = doc.querySelector('.clips-row-wrap.onda-carousel-final');
+    const container = doc.querySelector('.clips-container-main');
+    if (container) {
+      container.style.setProperty('width', '100%', 'important');
+      container.style.setProperty('align-items', 'center', 'important');
+    }
+    if (viewport) {
+      viewport.style.setProperty('margin-left', 'auto', 'important');
+      viewport.style.setProperty('margin-right', 'auto', 'important');
+    }
 
     const section = doc.querySelector('.carousel-section');
-    const onEnter = () => { paused = true; };
-    const onLeave = () => { paused = false; };
-    const onTouchStart = () => { paused = true; };
-    const onTouchEnd = () => setTimeout(() => { paused = false; }, 900);
-    section?.addEventListener('mouseenter', onEnter);
-    section?.addEventListener('mouseleave', onLeave);
-    section?.addEventListener('touchstart', onTouchStart, { passive:true });
-    section?.addEventListener('touchend', onTouchEnd, { passive:true });
-
-    render();
-    schedule();
-    enforceTimer = setInterval(render, 700);
-
-    const controller = {
-      destroy() {
-        clearInterval(timer);
-        clearInterval(enforceTimer);
-        doc.removeEventListener('click', onClick, true);
-        section?.removeEventListener('mouseenter', onEnter);
-        section?.removeEventListener('mouseleave', onLeave);
-        section?.removeEventListener('touchstart', onTouchStart);
-        section?.removeEventListener('touchend', onTouchEnd);
-      }
-    };
-    frame.__ondaGuestPhotoController = controller;
-    return controller;
+    if (section && !section.__ondaPhotoObserver) {
+      let timer = 0;
+      const observer = new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => patchFrameCards(frame, map), 80);
+      });
+      observer.observe(section, { childList: true, subtree: true, characterData: true });
+      section.__ondaPhotoObserver = observer;
+    }
   }
 
-  async function patchFrame(frame, force = false) {
-    try {
-      const data = await loadShowcase(force);
-      if (!frame.contentDocument?.head) return;
-      const key = frameDataKey(data);
-      if (!force && frame.__ondaGuestPhotoController && frame.dataset.ondaGuestPhotoDataKey === key) return;
-      frame.dataset.ondaGuestPhotoDataKey = key;
-      createFrameController(frame, data);
-    } catch (_) {}
-  }
-
-  function watchFrames(force = false) {
+  function patchFrames(map) {
     document.querySelectorAll('iframe.public-vitrine-frame, iframe[src*="/public/vitrine.html"]').forEach(frame => {
-      if (frame.dataset.ondaGuestPhotoWatch !== '1') {
-        frame.dataset.ondaGuestPhotoWatch = '1';
-        frame.addEventListener('load', () => {
-          delete frame.dataset.ondaGuestPhotoDataKey;
-          setTimeout(() => patchFrame(frame, true), 80);
-        });
+      if (frame.dataset.ondaGuestStableWatch !== '1') {
+        frame.dataset.ondaGuestStableWatch = '1';
+        frame.addEventListener('load', () => setTimeout(() => patchFrameCards(frame, map), 150));
       }
-      if (frame.contentDocument?.readyState === 'complete') patchFrame(frame, force);
+      patchFrameCards(frame, map);
     });
   }
 
-  async function patchAll(force = false) {
-    injectInternalStyle();
+  async function patch(force = false) {
+    ensureStyle();
     try {
-      const data = await loadShowcase(force);
-      patchInternal(data);
-    } catch (_) {}
-    watchFrames(force);
+      const data = await load(force);
+      const map = guestMap(data);
+      if (!map.size) return;
+      patchUpcomingShows(map);
+      patchDashboardGuests(map);
+      patchFrames(map);
+    } catch {}
   }
 
-  function schedulePatch() {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      patchAll(false);
-    });
+  function schedulePatch(delay = 100) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => patch(false), delay);
   }
 
-  injectInternalStyle();
-  patchAll(true);
-  new MutationObserver(schedulePatch).observe(document.documentElement, { childList:true, subtree:true });
-  setInterval(() => patchAll(false), 5000);
+  ensureStyle();
+  patch(true);
+  document.addEventListener('click', () => schedulePatch(140), true);
+  window.addEventListener('popstate', () => schedulePatch(80));
+  window.addEventListener('hashchange', () => schedulePatch(80));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) schedulePatch(80); });
+  setInterval(() => { if (!document.hidden) patch(false); }, 30_000);
 })();
