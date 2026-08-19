@@ -53,24 +53,35 @@
       .map(item => [normalize(item.name), item]));
   }
 
-  function makeImage(guest, className = '') {
+  function frameDataKey(data) {
+    return (Array.isArray(data?.guests) ? data.guests : [])
+      .map(item => `${item?.name || ''}|${item?.initials || ''}|${item?.photo || ''}`)
+      .join('||');
+  }
+
+  function makeImage(guest) {
     const image = document.createElement('img');
     image.loading = 'lazy';
     image.decoding = 'async';
     image.alt = `Foto de ${guest.name || 'convidado'}`;
-    if (className) image.className = className;
     const proxy = photoUrl(guest.photo);
     image.dataset.ondaOriginalPhoto = String(guest.photo || '');
     image.src = proxy || String(guest.photo || '');
     image.addEventListener('error', () => {
       const original = image.dataset.ondaOriginalPhoto || '';
-      if (original && image.src !== original && image.dataset.ondaOriginalTried !== '1') {
+      if (original && image.dataset.ondaOriginalTried !== '1') {
         image.dataset.ondaOriginalTried = '1';
         image.src = original;
         return;
       }
-      image.closest('.guest-media')?.setAttribute('data-photo-failed', '1');
-      image.remove();
+      const media = image.closest('.guest-media');
+      if (media) {
+        media.dataset.photoFailed = '1';
+        const label = media.closest('[data-collection="guests"]')?.querySelector('h3,strong')?.textContent || guest.name;
+        const fallback = document.createElement('b');
+        fallback.textContent = guest.initials || initials(label);
+        media.replaceChildren(fallback);
+      }
     });
     return image;
   }
@@ -87,8 +98,11 @@
       if (!media) return;
       const desired = photoUrl(guest.photo);
       const current = media.querySelector('img');
-      if (current && (current.getAttribute('src') === desired || current.dataset.ondaOriginalPhoto === String(guest.photo))) return;
-      media.dataset.photoFailed = '';
+      if (current && (current.getAttribute('src') === desired || current.dataset.ondaOriginalPhoto === String(guest.photo))) {
+        media.dataset.ondaGuestPhoto = '1';
+        return;
+      }
+      delete media.dataset.photoFailed;
       media.replaceChildren(makeImage(guest));
       media.dataset.ondaGuestPhoto = '1';
     });
@@ -186,7 +200,7 @@
       const name = card.querySelector('.guest-name');
       const initial = card.querySelector('.guest-initials');
       const key = `${guest.name}|${guest.photo || ''}`;
-      if (card.dataset.ondaGuestKey !== key) card.dataset.ondaGuestKey = key;
+      card.dataset.ondaGuestKey = key;
       if (name && name.textContent !== String(guest.name || '')) name.textContent = guest.name || '';
       if (initial) {
         const text = guest.initials || initials(guest.name);
@@ -194,16 +208,24 @@
       }
 
       if (guest.photo) {
-        const src = photoUrl(guest.photo);
-        const background = `linear-gradient(to top,rgba(4,10,18,.28),rgba(4,10,18,.02) 62%), url("${src.replace(/"/g, '%22')}")`;
+        const proxy = photoUrl(guest.photo);
+        const original = String(guest.photo || '').replace(/"/g, '%22');
+        const proxied = String(proxy || '').replace(/"/g, '%22');
+        const images = proxy && proxy !== guest.photo
+          ? `url("${proxied}"), url("${original}")`
+          : `url("${original}")`;
+        const background = `linear-gradient(to top,rgba(4,10,18,.28),rgba(4,10,18,.02) 62%), ${images}`;
         card.dataset.ondaRealPhoto = '1';
         card.style.setProperty('background-image', background, 'important');
-        card.style.setProperty('background-position', 'center', 'important');
-        card.style.setProperty('background-size', 'cover', 'important');
-        card.style.setProperty('background-repeat', 'no-repeat', 'important');
+        card.style.setProperty('background-position', 'center, center, center', 'important');
+        card.style.setProperty('background-size', 'cover, cover, cover', 'important');
+        card.style.setProperty('background-repeat', 'no-repeat, no-repeat, no-repeat', 'important');
       } else {
         card.dataset.ondaRealPhoto = '0';
         card.style.removeProperty('background-image');
+        card.style.removeProperty('background-position');
+        card.style.removeProperty('background-size');
+        card.style.removeProperty('background-repeat');
       }
       card.style.opacity = '1';
       card.style.transform = '';
@@ -256,12 +278,6 @@
         section?.removeEventListener('mouseleave', onLeave);
         section?.removeEventListener('touchstart', onTouchStart);
         section?.removeEventListener('touchend', onTouchEnd);
-      },
-      refresh(nextData) {
-        if (Array.isArray(nextData?.guests) && nextData.guests.length) {
-          controller.destroy();
-          frame.__ondaGuestPhotoController = createFrameController(frame, nextData);
-        }
       }
     };
     frame.__ondaGuestPhotoController = controller;
@@ -272,6 +288,9 @@
     try {
       const data = await loadShowcase(force);
       if (!frame.contentDocument?.head) return;
+      const key = frameDataKey(data);
+      if (!force && frame.__ondaGuestPhotoController && frame.dataset.ondaGuestPhotoDataKey === key) return;
+      frame.dataset.ondaGuestPhotoDataKey = key;
       createFrameController(frame, data);
     } catch (_) {}
   }
@@ -280,7 +299,10 @@
     document.querySelectorAll('iframe.public-vitrine-frame, iframe[src*="/public/vitrine.html"]').forEach(frame => {
       if (frame.dataset.ondaGuestPhotoWatch !== '1') {
         frame.dataset.ondaGuestPhotoWatch = '1';
-        frame.addEventListener('load', () => setTimeout(() => patchFrame(frame, true), 80));
+        frame.addEventListener('load', () => {
+          delete frame.dataset.ondaGuestPhotoDataKey;
+          setTimeout(() => patchFrame(frame, true), 80);
+        });
       }
       if (frame.contentDocument?.readyState === 'complete') patchFrame(frame, force);
     });
