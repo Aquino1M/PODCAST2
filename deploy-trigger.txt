@@ -1,0 +1,1 @@
+Trigger único de deploy para testar a liberação do limite da Vercel em 2026-08-19 18:07 -03:00.
