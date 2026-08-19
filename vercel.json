@@ -18,6 +18,7 @@
     { "source": "/shorts-feed", "destination": "/api/youtube-shorts20" },
     { "source": "/short-thumb/:id", "destination": "/api/short-thumb?id=:id" },
     { "source": "/social-live-api", "destination": "/api/social-live" },
+    { "source": "/tikhub-metrics-v2", "destination": "/api/tikhub-metrics-v2" },
     { "source": "/api/:path*", "destination": "/api?path=:path*" }
   ]
 }
