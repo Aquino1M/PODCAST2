@@ -42,6 +42,7 @@
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
+      background:#0d172b !important;
     }
     .row-clip-card.onda-coming-card .row-clip-initial,
     .row-clip-card.onda-coming-card .row-clip-name,
@@ -65,6 +66,39 @@
       z-index: 4 !important;
       pointer-events: none !important;
     }
+    .row-clip-card.onda-youtube-card {
+      background:#05070c !important;
+      border:1px solid rgba(255,255,255,.12) !important;
+      box-shadow:0 12px 26px rgba(15,23,42,.18) !important;
+    }
+    .row-clip-card.onda-youtube-card .clip-soon-label { display:none !important; }
+    .onda-short-frame {
+      position:absolute !important;
+      inset:0 !important;
+      width:100% !important;
+      height:100% !important;
+      border:0 !important;
+      background:#000 !important;
+      z-index:3 !important;
+    }
+    .onda-short-open {
+      position:absolute !important;
+      right:6px !important;
+      top:6px !important;
+      z-index:7 !important;
+      width:24px !important;
+      height:24px !important;
+      display:grid !important;
+      place-items:center !important;
+      border-radius:999px !important;
+      background:rgba(3,7,18,.72) !important;
+      border:1px solid rgba(255,255,255,.28) !important;
+      color:#fff !important;
+      text-decoration:none !important;
+      font:800 11px/1 Arial,sans-serif !important;
+      backdrop-filter:blur(8px) !important;
+    }
+    .onda-short-open:hover { background:rgba(3,7,18,.92) !important; }
 
     /* PC: ocupa a largura toda até o final. */
     @media (min-width: 1181px) {
@@ -143,9 +177,8 @@
         flex: 0 0 96px !important;
         border-radius: 18px !important;
       }
-      .clip-soon-label {
-        font-size: 12px !important;
-      }
+      .clip-soon-label { font-size: 12px !important; }
+      .onda-short-open { width:22px !important;height:22px !important;right:5px !important;top:5px !important; }
     }
   `;
 
@@ -165,6 +198,60 @@
     return cards;
   }
 
+  function mountShort(card, short, doc) {
+    if (!card || !short?.id || card.dataset.ondaShortId === short.id) return;
+    card.dataset.ondaShortId = short.id;
+    card.classList.remove('onda-coming-card');
+    card.classList.add('onda-youtube-card');
+    card.innerHTML = '';
+
+    const frame = doc.createElement('iframe');
+    frame.className = 'onda-short-frame';
+    frame.src = short.embedUrl || `https://www.youtube.com/embed/${encodeURIComponent(short.id)}?rel=0&playsinline=1`;
+    frame.title = `Short ${short.position || ''} do Podcast do Bebezão`.trim();
+    frame.loading = 'lazy';
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    frame.allowFullscreen = true;
+
+    const open = doc.createElement('a');
+    open.className = 'onda-short-open';
+    open.href = short.url || `https://www.youtube.com/shorts/${encodeURIComponent(short.id)}`;
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    open.title = 'Abrir este Short no YouTube';
+    open.setAttribute('aria-label', 'Abrir este Short no YouTube');
+    open.textContent = '↗';
+
+    card.append(frame, open);
+  }
+
+  async function hydrateYouTubeShorts(doc) {
+    const row = doc.querySelector('.clips-row');
+    if (!row || row.dataset.ondaShortsLoaded === '1' || row.dataset.ondaShortsLoading === '1') return;
+    row.dataset.ondaShortsLoading = '1';
+    try {
+      const response = await doc.defaultView.fetch('/api/youtube-shorts', { headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const shorts = Array.isArray(data?.shorts) ? data.shorts.slice(0, 5) : [];
+      if (!shorts.length) return;
+
+      const cards = Array.from(row.querySelectorAll('.row-clip-card'));
+      const originalCount = Number(row.dataset.ondaOriginalCount || cards.length || 0);
+      if (!originalCount) return;
+      cards.forEach((card, index) => {
+        const originalIndex = index % originalCount;
+        if (originalIndex < shorts.length) mountShort(card, shorts[originalIndex], doc);
+      });
+      row.dataset.ondaShortsLoaded = '1';
+    } catch (_) {
+      // Se o YouTube estiver temporariamente indisponível, os cards continuam como "Em breve".
+    } finally {
+      delete row.dataset.ondaShortsLoading;
+    }
+  }
+
   function startClipLoop(doc) {
     const viewport = doc.querySelector('.clips-row-wrap');
     const row = doc.querySelector('.clips-row');
@@ -173,6 +260,7 @@
     const original = markVideoCards(doc);
     if (!original.length) return;
     viewport.dataset.ondaAutoScroll = '1';
+    row.dataset.ondaOriginalCount = String(original.length);
 
     if (original.length > 1) {
       original.forEach(card => row.appendChild(card.cloneNode(true)));
@@ -197,6 +285,9 @@
     viewport.addEventListener('mouseleave', () => { paused = false; });
     viewport.addEventListener('touchstart', () => { paused = true; }, { passive: true });
     viewport.addEventListener('touchend', () => { setTimeout(() => { paused = false; }, 1200); }, { passive: true });
+    viewport.addEventListener('touchcancel', () => { setTimeout(() => { paused = false; }, 500); }, { passive: true });
+    doc.defaultView.addEventListener('blur', () => { paused = true; });
+    doc.defaultView.addEventListener('focus', () => { paused = false; });
     doc.defaultView.requestAnimationFrame(tick);
   }
 
@@ -296,6 +387,7 @@
         doc.head.appendChild(style);
       }
       startClipLoop(doc);
+      hydrateYouTubeShorts(doc);
       startSocialCarousel(doc);
     } catch (_) {}
   }
