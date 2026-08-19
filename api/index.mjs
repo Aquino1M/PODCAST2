@@ -4,16 +4,31 @@ const PROXY_URL = `${SUPABASE_URL}/functions/v1/onda-vercel-proxy`;
 const originalFetch = globalThis.fetch.bind(globalThis);
 const configuredKey = String(process.env.SUPABASE_SECRET_KEY || "");
 const oidcToken = process.env.VERCEL_OIDC_TOKEN;
-const hasBackendSecret = Boolean(configuredKey) && !configuredKey.startsWith("sb_publishable_") && configuredKey !== "__vercel_oidc_proxy__";
+
+function isPrivilegedSupabaseKey(key) {
+  if (!key) return false;
+  if (key.startsWith("sb_secret_")) return true;
+  if (!key.includes(".")) return false;
+  try {
+    const payload = key.split(".")[1] || "";
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const data = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    return data?.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
+const hasBackendSecret = isPrivilegedSupabaseKey(configuredKey);
 
 // O backend precisa sempre conhecer a URL do projeto. Sem isso, o server.mjs
 // cai para o armazenamento local e tenta gravar em /var/task, que é read-only no Vercel.
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || SUPABASE_URL;
 
 if (!hasBackendSecret && oidcToken) {
-  // O server.mjs só precisa de uma chave presente para habilitar o modo remoto.
-  // O valor real nunca é exposto: as operações administrativas passam pela
-  // Edge Function do Supabase autenticada pelo OIDC do próprio Vercel.
+  // Se a variável tiver recebido uma publishable/anon key por engano, não a usa
+  // como chave administrativa. O acesso passa pelo proxy seguro no Supabase.
   process.env.SUPABASE_SECRET_KEY = "__vercel_oidc_proxy__";
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -46,8 +61,6 @@ if (!hasBackendSecret && oidcToken) {
         let lastError = null;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            // Não reutiliza o AbortSignal de 5s do server.mjs: em cold start a
-            // Edge Function pode precisar de mais tempo para validar o OIDC.
             const response = await originalFetch(PROXY_URL, {
               method: "POST",
               headers: {
@@ -56,11 +69,12 @@ if (!hasBackendSecret && oidcToken) {
                 "apikey": SUPABASE_PUBLISHABLE_KEY,
               },
               body: payload,
+              // Não reutiliza o timeout curto do server.mjs. Em cold start a
+              // Edge Function pode precisar de alguns segundos para validar OIDC.
               signal: AbortSignal.timeout(15_000),
             });
             lastResponse = response;
             if (response.ok) return response;
-            // Erros transitórios do proxy podem acontecer em cold start.
             if (![408, 425, 429, 500, 502, 503, 504].includes(response.status)) return response;
           } catch (error) {
             lastError = error;
