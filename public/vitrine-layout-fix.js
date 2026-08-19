@@ -2,7 +2,7 @@
   const STYLE_ID = 'onda-vitrine-layout-fix';
 
   const css = `
-    /* Ajuste solicitado: cards de vídeo todos do mesmo tamanho, centralizados e rolando. */
+    /* Área inferior: enquanto os vídeos não forem publicados. */
     .clips-container-main {
       width: 100% !important;
       max-width: none !important;
@@ -11,53 +11,43 @@
     .clips-row-wrap {
       width: 100% !important;
       max-width: none !important;
-      overflow-x: hidden !important;
-      overflow-y: visible !important;
-      justify-content: flex-start !important;
-      padding: 12px 0 18px !important;
+      overflow: hidden !important;
+      justify-content: center !important;
+      padding: 24px 0 18px !important;
       margin: 0 !important;
     }
     .clips-row {
-      width: max-content !important;
+      width: 100% !important;
       max-width: none !important;
-      min-width: max-content !important;
-      justify-content: flex-start !important;
+      min-width: 0 !important;
+      display: flex !important;
+      justify-content: center !important;
       align-items: center !important;
-      gap: 24px !important;
       margin: 0 !important;
       padding: 0 12px !important;
     }
-    .row-clip-card,
-    .row-clip-card.featured {
-      width: 112px !important;
-      height: 118px !important;
-      flex: 0 0 112px !important;
-      margin: 0 !important;
-      padding: 22px 10px 14px !important;
-      border-radius: 20px !important;
-      border: 1px solid rgba(255,255,255,.7) !important;
-      box-shadow: 0 12px 28px rgba(15,23,42,.14), 0 3px 10px rgba(15,23,42,.06) !important;
-      transform: none !important;
+    .clips-coming-soon {
+      width: min(100%, 620px);
+      min-height: 118px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      border-radius: 24px;
+      border: 1px solid var(--border-light, rgba(148,163,184,.18));
+      background: var(--bg-card, rgba(255,255,255,.82));
+      color: var(--text-primary, #0F172A);
+      box-shadow: var(--shadow-soft, 0 12px 28px rgba(15,23,42,.08));
+      font-size: clamp(17px, 2.2vw, 24px);
+      font-weight: 800;
+      letter-spacing: -.02em;
     }
-    .row-clip-card.featured .row-clip-initial {
-      width: auto !important;
-      height: auto !important;
-      border-radius: 0 !important;
-      display: block !important;
-      font-size: 30px !important;
-      background: transparent !important;
-      box-shadow: none !important;
-    }
-    .row-clip-card.featured .row-clip-name {
-      width: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      background: transparent !important;
-      font-size: 13px !important;
-      font-weight: 700 !important;
-      letter-spacing: 0 !important;
-      text-transform: none !important;
-      text-shadow: 0 3px 10px rgba(0,0,0,.5) !important;
+    body.dark-mode .clips-coming-soon {
+      background: rgba(15,23,42,.78);
+      color: #F8FAFC;
+      border-color: rgba(148,163,184,.16);
+      box-shadow: 0 14px 32px rgba(0,0,0,.22);
     }
 
     /* PC: ocupa a largura toda até o final. */
@@ -67,7 +57,6 @@
       .bottom-showcase,
       .clips-container-main,
       .clips-row-wrap { width: 100% !important; max-width: none !important; }
-      .clips-row { min-width: 100% !important; }
     }
 
     /* Tablet: as quatro redes ficam em uma única linha, não 2x2. */
@@ -97,7 +86,7 @@
       .gauge-percentage { font-size: 22px !important; }
     }
 
-    /* Celular: continua uma única fileira horizontal; nada de 2x2. */
+    /* Celular: redes em carrossel horizontal automático, uma passando para o lado da outra. */
     @media (max-width: 700px) {
       .analytics-grid {
         display: flex !important;
@@ -106,11 +95,13 @@
         overflow-x: auto !important;
         overflow-y: visible !important;
         width: 100% !important;
-        padding: 2px 2px 14px !important;
+        padding: 2px max(9vw, 18px) 14px !important;
         margin: 0 !important;
         scroll-snap-type: x mandatory !important;
+        scroll-behavior: smooth !important;
         scrollbar-width: none !important;
         -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-inline: contain !important;
       }
       .analytics-grid::-webkit-scrollbar { display: none !important; }
       .platform-card {
@@ -118,56 +109,123 @@
         width: min(82vw, 320px) !important;
         min-width: min(82vw, 320px) !important;
         scroll-snap-align: center !important;
+        scroll-snap-stop: always !important;
       }
       .clips-row-wrap {
-        overflow-x: hidden !important;
         width: 100% !important;
         margin: 0 !important;
-        padding: 12px 0 18px !important;
+        padding: 18px 0 14px !important;
       }
-      .clips-row { gap: 14px !important; padding: 0 8px !important; }
-      .row-clip-card,
-      .row-clip-card.featured {
-        width: 96px !important;
-        height: 104px !important;
-        flex-basis: 96px !important;
-        border-radius: 18px !important;
-        padding: 18px 8px 12px !important;
+      .clips-coming-soon {
+        width: calc(100% - 20px);
+        min-height: 104px;
+        border-radius: 20px;
+        font-size: 18px;
       }
     }
   `;
 
-  function startClipLoop(doc) {
-    const viewport = doc.querySelector('.clips-row-wrap');
+  function showComingSoon(doc) {
     const row = doc.querySelector('.clips-row');
-    if (!viewport || !row || viewport.dataset.ondaAutoScroll === '1') return;
+    if (!row || row.dataset.ondaComingSoon === '1') return;
+    row.dataset.ondaComingSoon = '1';
+    row.innerHTML = '<div class="clips-coming-soon" role="status">Em breve vídeos</div>';
+  }
 
-    viewport.dataset.ondaAutoScroll = '1';
-    const original = Array.from(row.children);
-    if (original.length > 1) {
-      original.forEach(card => row.appendChild(card.cloneNode(true)));
-    }
+  function startSocialCarousel(doc) {
+    const grid = doc.querySelector('.analytics-grid');
+    if (!grid || grid.dataset.ondaSocialCarousel === '1') return;
 
-    let paused = false;
-    let last = performance.now();
-    const half = () => row.scrollWidth / 2;
+    grid.dataset.ondaSocialCarousel = '1';
+    let index = 0;
+    let timer = null;
+    let resumeTimer = null;
+    let userInteracting = false;
 
-    const tick = now => {
-      if (!doc.defaultView || !doc.body.isConnected) return;
-      if (!paused && !doc.hidden && row.scrollWidth > viewport.clientWidth) {
-        viewport.scrollLeft += Math.min(1.2, (now - last) * 0.035);
-        const limit = half();
-        if (limit > 0 && viewport.scrollLeft >= limit) viewport.scrollLeft -= limit;
-      }
-      last = now;
-      doc.defaultView.requestAnimationFrame(tick);
+    const isMobile = () => (doc.defaultView?.innerWidth || 9999) <= 700;
+    const cards = () => Array.from(grid.querySelectorAll('.platform-card'));
+
+    const centeredLeft = card => {
+      return Math.max(0, card.offsetLeft - (grid.clientWidth - card.clientWidth) / 2);
     };
 
-    viewport.addEventListener('mouseenter', () => { paused = true; });
-    viewport.addEventListener('mouseleave', () => { paused = false; });
-    viewport.addEventListener('touchstart', () => { paused = true; }, { passive: true });
-    viewport.addEventListener('touchend', () => { setTimeout(() => { paused = false; }, 1200); }, { passive: true });
-    doc.defaultView.requestAnimationFrame(tick);
+    const goTo = (nextIndex, smooth = true) => {
+      const list = cards();
+      if (!list.length || !isMobile()) return;
+      index = ((nextIndex % list.length) + list.length) % list.length;
+      grid.scrollTo({
+        left: centeredLeft(list[index]),
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    };
+
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+
+    const start = () => {
+      stop();
+      if (!isMobile()) return;
+      timer = setInterval(() => {
+        if (userInteracting || doc.hidden) return;
+        const list = cards();
+        if (list.length < 2) return;
+        goTo(index + 1, true);
+      }, 3200);
+    };
+
+    const pauseForUser = () => {
+      userInteracting = true;
+      stop();
+      if (resumeTimer) clearTimeout(resumeTimer);
+    };
+
+    const resumeAfterUser = () => {
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => {
+        userInteracting = false;
+        const list = cards();
+        if (list.length) {
+          const center = grid.scrollLeft + grid.clientWidth / 2;
+          let nearest = 0;
+          let nearestDistance = Infinity;
+          list.forEach((card, i) => {
+            const cardCenter = card.offsetLeft + card.clientWidth / 2;
+            const distance = Math.abs(cardCenter - center);
+            if (distance < nearestDistance) {
+              nearestDistance = distance;
+              nearest = i;
+            }
+          });
+          index = nearest;
+        }
+        start();
+      }, 1300);
+    };
+
+    grid.addEventListener('touchstart', pauseForUser, { passive: true });
+    grid.addEventListener('touchend', resumeAfterUser, { passive: true });
+    grid.addEventListener('touchcancel', resumeAfterUser, { passive: true });
+    grid.addEventListener('pointerdown', event => {
+      if (event.pointerType !== 'mouse') pauseForUser();
+    }, { passive: true });
+    grid.addEventListener('pointerup', event => {
+      if (event.pointerType !== 'mouse') resumeAfterUser();
+    }, { passive: true });
+
+    doc.defaultView?.addEventListener('resize', () => {
+      stop();
+      if (isMobile()) {
+        setTimeout(() => goTo(index, false), 80);
+        start();
+      }
+    });
+
+    setTimeout(() => {
+      if (isMobile()) goTo(0, false);
+      start();
+    }, 350);
   }
 
   function applyToFrame(frame) {
@@ -180,7 +238,8 @@
         style.textContent = css;
         doc.head.appendChild(style);
       }
-      startClipLoop(doc);
+      showComingSoon(doc);
+      startSocialCarousel(doc);
     } catch (_) {}
   }
 
