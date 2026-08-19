@@ -108,19 +108,96 @@
     }
   }
 
+  function patchTikHubOnlyModal() {
+    const list = document.querySelector('.modal-overlay .connection-list');
+    if (!list) return;
+    const tikhub = list.querySelector(':scope > .onda-tikhub-row');
+    if (!tikhub) return;
+
+    [...list.children].forEach(child => {
+      if (child !== tikhub) child.remove();
+    });
+
+    const overlay = list.closest('.modal-overlay');
+    const eyebrow = overlay?.querySelector('.modal-head .eyebrow');
+    const title = overlay?.querySelector('.modal-head h2');
+    if (eyebrow) eyebrow.textContent = 'TIKHUB API';
+    if (title) title.textContent = 'Conectar contas pela TikHub';
+
+    list.parentElement?.querySelector('.setup-note')?.remove();
+    const sourceText = list.parentElement?.querySelector('.onda-vitrine-source-box small');
+    if (sourceText) sourceText.textContent = 'Use dados demonstrativos ou os dados verdadeiros consultados somente pela TikHub.';
+  }
+
+  function makeExtraLine(doc, base, stroke, transform, name) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const line = doc.createElementNS(ns, 'path');
+    line.setAttribute('d', base.getAttribute('d') || '');
+    line.setAttribute('class', `chart-line onda-chart-extra onda-chart-${name}`);
+    line.setAttribute('stroke', stroke);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('transform', transform);
+    line.setAttribute('pointer-events', 'none');
+    line.style.opacity = '.9';
+    return line;
+  }
+
+  function patchFourLineCharts(doc) {
+    if (!doc) return;
+    doc.querySelectorAll('.platform-card .chart-svg').forEach(svg => {
+      const existing = svg.querySelectorAll('.onda-chart-extra');
+      if (existing.length >= 2) return;
+      existing.forEach(item => item.remove());
+
+      const base = [...svg.querySelectorAll('path.chart-line:not(.onda-chart-extra)')];
+      if (base.length < 2) return;
+
+      const orange = makeExtraLine(doc, base[1], '#F59E0B', 'translate(0 7)', 'orange');
+      const red = makeExtraLine(doc, base[0], '#EF4444', 'translate(0 -7)', 'red');
+      const anchor = svg.querySelector('.chart-hover-line');
+      if (anchor) {
+        svg.insertBefore(orange, anchor);
+        svg.insertBefore(red, anchor);
+      } else {
+        svg.appendChild(orange);
+        svg.appendChild(red);
+      }
+    });
+  }
+
+  function bindFrameChartRefresh(frame) {
+    let doc;
+    try { doc = frame.contentDocument; } catch { return; }
+    if (!doc?.documentElement) return;
+    patchFourLineCharts(doc);
+    if (doc.documentElement.dataset.ondaFourLineBound === '1') return;
+    doc.documentElement.dataset.ondaFourLineBound = '1';
+    doc.addEventListener('click', () => {
+      setTimeout(() => patchFourLineCharts(doc), 90);
+      setTimeout(() => patchFourLineCharts(doc), 260);
+    }, true);
+  }
+
+  function patchFrameCharts() {
+    document.querySelectorAll('iframe.public-vitrine-frame,iframe[src*="/public/vitrine.html"]').forEach(frame => {
+      bindFrameChartRefresh(frame);
+    });
+  }
+
   async function syncFrames(data, force = false) {
     if (!data || data.mode !== 'real') return;
     const publicData = await showcase(force);
-    const oauth = publicData?.metrics && typeof publicData.metrics === 'object' ? publicData.metrics : {};
     const realTikHub = {};
     for (const [provider, metric] of Object.entries(data.metrics || {})) {
       if (usable(metric)) realTikHub[provider] = metric;
     }
-    const merged = { ...realTikHub, ...oauth };
-    const payload = { type:'onda-showcase-data', data:{ ...publicData, metrics:merged, socialDisplayMode:'real' } };
+
+    // A vitrine usa somente a TikHub. OAuth oficial não é mais mesclado aqui.
+    const payload = { type:'onda-showcase-data', data:{ ...publicData, metrics:realTikHub, socialDisplayMode:'real' } };
     document.querySelectorAll('iframe.public-vitrine-frame,iframe[src*="/public/vitrine.html"]').forEach(frame => {
       try { frame.contentWindow?.postMessage(payload, location.origin); } catch {}
       setTimeout(() => patchFrameUnavailable(frame, data), 60);
+      setTimeout(() => bindFrameChartRefresh(frame), 120);
     });
   }
 
@@ -132,6 +209,8 @@
       patchMetricCards(data);
       patchDashboard(data);
       await syncFrames(data, force);
+      patchFrameCharts();
+      patchTikHubOnlyModal();
     } catch (error) {
       console.warn('[TikHub] atualização adiada:', error?.message || error);
     } finally {
@@ -193,27 +272,45 @@
   });
 
   document.addEventListener('click', event => {
-    if (event.target?.closest?.('[data-page="metrics"], [data-open-social], [data-action="connect-social"]')) {
+    const target = event.target;
+    if (target?.closest?.('[data-page="metrics"], [data-open-social], [data-action="connect-social"]')) {
       setTimeout(() => apply(false), 180);
+    }
+    if (target?.closest?.('[data-primary-action]')) {
+      setTimeout(patchTikHubOnlyModal, 220);
+      setTimeout(patchTikHubOnlyModal, 650);
+      setTimeout(patchTikHubOnlyModal, 1400);
     }
   }, true);
 
   function watchFrames() {
     document.querySelectorAll('iframe.public-vitrine-frame,iframe[src*="/public/vitrine.html"]').forEach(frame => {
-      if (frame.dataset.ondaTikHubStableWatch === '1') return;
+      if (frame.dataset.ondaTikHubStableWatch === '1') {
+        bindFrameChartRefresh(frame);
+        return;
+      }
       frame.dataset.ondaTikHubStableWatch = '1';
-      frame.addEventListener('load', () => setTimeout(() => apply(false), 180));
+      frame.addEventListener('load', () => {
+        setTimeout(() => apply(false), 180);
+        setTimeout(() => bindFrameChartRefresh(frame), 300);
+        setTimeout(() => bindFrameChartRefresh(frame), 900);
+      });
+      bindFrameChartRefresh(frame);
     });
   }
 
   watchFrames();
-  setTimeout(() => { watchFrames(); apply(true); }, 500);
-  setTimeout(() => apply(false), 1800);
+  setTimeout(() => { watchFrames(); apply(true); patchTikHubOnlyModal(); }, 500);
+  setTimeout(() => { apply(false); patchFrameCharts(); patchTikHubOnlyModal(); }, 1800);
   window.addEventListener('focus', () => {
     if (!stateAt || Date.now() - stateAt >= REFRESH_MS) apply(false);
+    else patchFrameCharts();
   });
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && (!stateAt || Date.now() - stateAt >= REFRESH_MS)) apply(false);
+    if (!document.hidden) {
+      if (!stateAt || Date.now() - stateAt >= REFRESH_MS) apply(false);
+      else patchFrameCharts();
+    }
   });
   setInterval(() => {
     if (!document.hidden && document.querySelector('.metrics-network-grid,[data-channel-panel],iframe.public-vitrine-frame,iframe[src*="/public/vitrine.html"]')) {
